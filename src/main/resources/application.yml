@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: sublite-core
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/sublite
+    username: sublite
+    password: sublite
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    schemas: shared,subscription
+    default-schema: shared
