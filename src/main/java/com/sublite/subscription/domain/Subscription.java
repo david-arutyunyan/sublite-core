@@ -53,6 +53,12 @@ public class Subscription {
     @Column(name = "cancelled_at")
     private Instant cancelledAt;
 
+    @Column(name = "failed_charge_attempts", nullable = false)
+    private int failedChargeAttempts;
+
+    @Column(name = "cancellation_reason", length = 50)
+    private String cancellationReason;
+
     @Version
     @Column(nullable = false)
     private long version;
@@ -127,5 +133,63 @@ public class Subscription {
 
     public long getVersion() {
         return version;
+    }
+
+    public int getFailedChargeAttempts() {
+        return failedChargeAttempts;
+    }
+
+    public String getCancellationReason() {
+        return cancellationReason;
+    }
+
+    /**
+     * Builds the rich state representation from the flat columns above.
+     * The table stays one row per subscription regardless of status -
+     * SubscriptionState only exists transiently, for SubscriptionTransitions
+     * to reason about.
+     */
+    public SubscriptionState toState() {
+        return switch (status) {
+            case TRIAL -> new SubscriptionState.Trial(trialEndsAt);
+            case ACTIVE -> new SubscriptionState.Active(currentPeriodEnd);
+            case GRACE_PERIOD -> new SubscriptionState.GracePeriod(currentPeriodEnd, failedChargeAttempts);
+            case PAUSED -> new SubscriptionState.Paused(currentPeriodEnd);
+            case CANCELLED -> new SubscriptionState.Cancelled(cancelledAt, cancellationReason);
+        };
+    }
+
+    /**
+     * The reverse of toState(): writes a computed SubscriptionState back
+     * onto the flat columns. Exhaustive over the sealed SubscriptionState,
+     * so a new state variant fails the build here until handled.
+     */
+    public void applyState(SubscriptionState newState, Instant now) {
+        switch (newState) {
+            case SubscriptionState.Trial trial -> {
+                this.status = SubscriptionStatus.TRIAL;
+                this.trialEndsAt = trial.trialEndsAt();
+            }
+            case SubscriptionState.Active active -> {
+                this.status = SubscriptionStatus.ACTIVE;
+                this.currentPeriodEnd = active.currentPeriodEnd();
+                this.failedChargeAttempts = 0;
+            }
+            case SubscriptionState.GracePeriod gracePeriod -> {
+                this.status = SubscriptionStatus.GRACE_PERIOD;
+                this.currentPeriodEnd = gracePeriod.currentPeriodEnd();
+                this.failedChargeAttempts = gracePeriod.failedAttempts();
+            }
+            case SubscriptionState.Paused paused -> {
+                this.status = SubscriptionStatus.PAUSED;
+                this.currentPeriodEnd = paused.currentPeriodEnd();
+            }
+            case SubscriptionState.Cancelled cancelled -> {
+                this.status = SubscriptionStatus.CANCELLED;
+                this.cancelledAt = cancelled.cancelledAt();
+                this.cancellationReason = cancelled.reason();
+            }
+        }
+        this.updatedAt = now;
     }
 }
