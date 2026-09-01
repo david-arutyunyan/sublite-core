@@ -14,5 +14,13 @@ spring:
 
   flyway:
     enabled: true
-    schemas: shared,subscription
+    schemas: shared,subscription,billing
     default-schema: shared
+
+sublite:
+  billing:
+    scheduler:
+      interval: PT1M
+    retry:
+      base-interval: P1D
+      max-attempts: 3
