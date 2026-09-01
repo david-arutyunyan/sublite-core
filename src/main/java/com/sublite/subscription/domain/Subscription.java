@@ -59,6 +59,9 @@ public class Subscription {
     @Column(name = "cancellation_reason", length = 50)
     private String cancellationReason;
 
+    @Column(name = "last_charge_attempt_at")
+    private Instant lastChargeAttemptAt;
+
     @Version
     @Column(nullable = false)
     private long version;
@@ -143,6 +146,19 @@ public class Subscription {
         return cancellationReason;
     }
 
+    public Instant getLastChargeAttemptAt() {
+        return lastChargeAttemptAt;
+    }
+
+    /**
+     * Separate from applyState()/SubscriptionEvent on purpose: "we tried to
+     * charge" isn't a lifecycle transition by itself (the outcome is), it's
+     * bookkeeping RetryPolicy needs to compute the next backoff window.
+     */
+    public void recordChargeAttempt(Instant attemptedAt) {
+        this.lastChargeAttemptAt = attemptedAt;
+    }
+
     /**
      * Builds the rich state representation from the flat columns above.
      * The table stays one row per subscription regardless of status -
@@ -152,7 +168,7 @@ public class Subscription {
     public SubscriptionState toState() {
         return switch (status) {
             case TRIAL -> new SubscriptionState.Trial(trialEndsAt);
-            case ACTIVE -> new SubscriptionState.Active(currentPeriodEnd);
+            case ACTIVE -> new SubscriptionState.Active(currentPeriodStart, currentPeriodEnd);
             case GRACE_PERIOD -> new SubscriptionState.GracePeriod(currentPeriodEnd, failedChargeAttempts);
             case PAUSED -> new SubscriptionState.Paused(currentPeriodEnd);
             case CANCELLED -> new SubscriptionState.Cancelled(cancelledAt, cancellationReason);
@@ -172,6 +188,7 @@ public class Subscription {
             }
             case SubscriptionState.Active active -> {
                 this.status = SubscriptionStatus.ACTIVE;
+                this.currentPeriodStart = active.currentPeriodStart();
                 this.currentPeriodEnd = active.currentPeriodEnd();
                 this.failedChargeAttempts = 0;
             }

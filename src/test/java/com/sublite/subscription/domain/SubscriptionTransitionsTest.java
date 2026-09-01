@@ -10,6 +10,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class SubscriptionTransitionsTest {
 
     private final Instant now = Instant.parse("2026-09-01T00:00:00Z");
+    private final Instant periodStart = Instant.parse("2026-08-01T00:00:00Z");
+    private final Instant periodEnd = Instant.parse("2026-09-01T00:00:00Z");
     private final Instant nextPeriodEnd = Instant.parse("2026-10-01T00:00:00Z");
 
     @Test
@@ -20,7 +22,7 @@ class SubscriptionTransitionsTest {
                 now
         );
 
-        assertThat(result).isEqualTo(new SubscriptionState.Active(nextPeriodEnd));
+        assertThat(result).isEqualTo(new SubscriptionState.Active(now, nextPeriodEnd));
     }
 
     @Test
@@ -37,40 +39,40 @@ class SubscriptionTransitionsTest {
     @Test
     void activeMovesToGracePeriodOnFailedCharge() {
         SubscriptionState result = SubscriptionTransitions.apply(
-                new SubscriptionState.Active(now),
+                new SubscriptionState.Active(periodStart, periodEnd),
                 new SubscriptionEvent.ChargeFailed(),
                 now
         );
 
-        assertThat(result).isEqualTo(new SubscriptionState.GracePeriod(now, 1));
+        assertThat(result).isEqualTo(new SubscriptionState.GracePeriod(periodEnd, 1));
     }
 
     @Test
     void gracePeriodRecoversOnSuccessfulCharge() {
         SubscriptionState result = SubscriptionTransitions.apply(
-                new SubscriptionState.GracePeriod(now, 2),
+                new SubscriptionState.GracePeriod(periodEnd, 2),
                 new SubscriptionEvent.ChargeSucceeded(nextPeriodEnd),
                 now
         );
 
-        assertThat(result).isEqualTo(new SubscriptionState.Active(nextPeriodEnd));
+        assertThat(result).isEqualTo(new SubscriptionState.Active(now, nextPeriodEnd));
     }
 
     @Test
     void gracePeriodIncrementsFailedAttemptsOnRepeatedFailure() {
         SubscriptionState result = SubscriptionTransitions.apply(
-                new SubscriptionState.GracePeriod(now, 1),
+                new SubscriptionState.GracePeriod(periodEnd, 1),
                 new SubscriptionEvent.ChargeFailed(),
                 now
         );
 
-        assertThat(result).isEqualTo(new SubscriptionState.GracePeriod(now, 2));
+        assertThat(result).isEqualTo(new SubscriptionState.GracePeriod(periodEnd, 2));
     }
 
     @Test
     void gracePeriodExpiresIntoCancelled() {
         SubscriptionState result = SubscriptionTransitions.apply(
-                new SubscriptionState.GracePeriod(now, 3),
+                new SubscriptionState.GracePeriod(periodEnd, 3),
                 new SubscriptionEvent.GracePeriodExpired(),
                 now
         );
@@ -81,7 +83,7 @@ class SubscriptionTransitionsTest {
     @Test
     void activeCanBePausedAndResumedBackToTheSamePeriodEnd() {
         SubscriptionState paused = SubscriptionTransitions.apply(
-                new SubscriptionState.Active(nextPeriodEnd),
+                new SubscriptionState.Active(periodStart, nextPeriodEnd),
                 new SubscriptionEvent.PauseRequested(),
                 now
         );
@@ -92,13 +94,13 @@ class SubscriptionTransitionsTest {
                 new SubscriptionEvent.ResumeRequested(),
                 now
         );
-        assertThat(resumed).isEqualTo(new SubscriptionState.Active(nextPeriodEnd));
+        assertThat(resumed).isEqualTo(new SubscriptionState.Active(now, nextPeriodEnd));
     }
 
     @Test
     void activeSubscriptionCanBeCancelledDirectly() {
         SubscriptionState result = SubscriptionTransitions.apply(
-                new SubscriptionState.Active(now),
+                new SubscriptionState.Active(periodStart, periodEnd),
                 new SubscriptionEvent.CancelRequested("USER_REQUESTED"),
                 now
         );
@@ -125,7 +127,7 @@ class SubscriptionTransitionsTest {
     @Test
     void resumeIsNotAllowedWhileActive() {
         assertThatThrownBy(() ->
-                SubscriptionTransitions.apply(new SubscriptionState.Active(now), new SubscriptionEvent.ResumeRequested(), now)
+                SubscriptionTransitions.apply(new SubscriptionState.Active(periodStart, periodEnd), new SubscriptionEvent.ResumeRequested(), now)
         ).isInstanceOf(InvalidSubscriptionTransitionException.class);
     }
 }

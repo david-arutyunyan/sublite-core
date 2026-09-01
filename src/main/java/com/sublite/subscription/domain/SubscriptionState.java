@@ -13,7 +13,7 @@ public sealed interface SubscriptionState {
     record Trial(Instant trialEndsAt) implements SubscriptionState {
     }
 
-    record Active(Instant currentPeriodEnd) implements SubscriptionState {
+    record Active(Instant currentPeriodStart, Instant currentPeriodEnd) implements SubscriptionState {
     }
 
     record GracePeriod(Instant currentPeriodEnd, int failedAttempts) implements SubscriptionState {

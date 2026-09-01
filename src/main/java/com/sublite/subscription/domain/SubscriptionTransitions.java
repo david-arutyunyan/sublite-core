@@ -18,14 +18,14 @@ public final class SubscriptionTransitions {
     public static SubscriptionState apply(SubscriptionState state, SubscriptionEvent event, Instant now) {
         return switch (state) {
             case SubscriptionState.Trial trial -> switch (event) {
-                case SubscriptionEvent.ChargeSucceeded e -> new SubscriptionState.Active(e.newPeriodEnd());
+                case SubscriptionEvent.ChargeSucceeded e -> new SubscriptionState.Active(now, e.newPeriodEnd());
                 case SubscriptionEvent.ChargeFailed e -> new SubscriptionState.Cancelled(now, "TRIAL_CONVERSION_FAILED");
                 case SubscriptionEvent.CancelRequested e -> new SubscriptionState.Cancelled(now, e.reason());
                 default -> throw new InvalidSubscriptionTransitionException(state, event);
             };
 
             case SubscriptionState.Active active -> switch (event) {
-                case SubscriptionEvent.ChargeSucceeded e -> new SubscriptionState.Active(e.newPeriodEnd());
+                case SubscriptionEvent.ChargeSucceeded e -> new SubscriptionState.Active(now, e.newPeriodEnd());
                 case SubscriptionEvent.ChargeFailed e -> new SubscriptionState.GracePeriod(active.currentPeriodEnd(), 1);
                 case SubscriptionEvent.PauseRequested e -> new SubscriptionState.Paused(active.currentPeriodEnd());
                 case SubscriptionEvent.CancelRequested e -> new SubscriptionState.Cancelled(now, e.reason());
@@ -33,7 +33,7 @@ public final class SubscriptionTransitions {
             };
 
             case SubscriptionState.GracePeriod gracePeriod -> switch (event) {
-                case SubscriptionEvent.ChargeSucceeded e -> new SubscriptionState.Active(e.newPeriodEnd());
+                case SubscriptionEvent.ChargeSucceeded e -> new SubscriptionState.Active(now, e.newPeriodEnd());
                 case SubscriptionEvent.ChargeFailed e ->
                         new SubscriptionState.GracePeriod(gracePeriod.currentPeriodEnd(), gracePeriod.failedAttempts() + 1);
                 case SubscriptionEvent.GracePeriodExpired e -> new SubscriptionState.Cancelled(now, "PAYMENT_FAILED");
@@ -42,7 +42,7 @@ public final class SubscriptionTransitions {
             };
 
             case SubscriptionState.Paused paused -> switch (event) {
-                case SubscriptionEvent.ResumeRequested e -> new SubscriptionState.Active(paused.currentPeriodEnd());
+                case SubscriptionEvent.ResumeRequested e -> new SubscriptionState.Active(now, paused.currentPeriodEnd());
                 case SubscriptionEvent.CancelRequested e -> new SubscriptionState.Cancelled(now, e.reason());
                 default -> throw new InvalidSubscriptionTransitionException(state, event);
             };
