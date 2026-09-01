@@ -21,6 +21,7 @@ public class Plan {
     @Column(nullable = false)
     private String name;
 
+    @Column(columnDefinition = "text")
     private String description;
 
     @Column(name = "is_active", nullable = false)

@@ -3,7 +3,7 @@ CREATE TABLE subscription.plan_prices (
     plan_id         UUID NOT NULL REFERENCES subscription.plans(id),
     billing_period  VARCHAR(10) NOT NULL CHECK (billing_period IN ('MONTHLY', 'YEARLY')),
     amount          NUMERIC(10, 2) NOT NULL CHECK (amount >= 0),
-    currency        CHAR(3) NOT NULL,
+    currency        VARCHAR(3) NOT NULL,
 
     -- [valid_from, valid_to) — valid_to = infinity while this is the current price.
     -- See V4 note in the migration explanation for why this is a range, not two columns.
