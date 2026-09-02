@@ -11,6 +11,7 @@ import com.sublite.retention.domain.RetentionStepType;
 import com.sublite.retention.infrastructure.CancellationAttemptRepository;
 import com.sublite.retention.infrastructure.RetentionOfferRepository;
 import com.sublite.retention.infrastructure.RetentionStepRepository;
+import com.sublite.loyalty.application.LoyaltyService;
 import com.sublite.shared.domain.Money;
 import com.sublite.shared.domain.User;
 import com.sublite.shared.infrastructure.UserRepository;
@@ -76,6 +77,8 @@ class RetentionFlowServiceIT {
     private PlanPriceRepository planPrices;
     @Autowired
     private UserRepository users;
+    @Autowired
+    private LoyaltyService loyaltyService;
 
     private UUID subscriptionId;
 
@@ -149,6 +152,33 @@ class RetentionFlowServiceIT {
 
         assertThatThrownBy(() -> flowService.acceptCurrentOffer(attempt.getId()))
                 .isInstanceOf(InvalidCancellationStepException.class);
+    }
+
+    @Test
+    void acceptingALoyaltyPointsOfferAwardsPointsThroughTheRealLoyaltyService() {
+        // setUp() built a pause-offer flow; swap it for one whose OFFER
+        // step grants loyalty points, to prove the LoyaltyAwarder wiring
+        // (not just RetentionFlowService's own bookkeeping) works end to end.
+        attempts.deleteAll();
+        steps.deleteAll();
+        offers.deleteAll();
+        flowConfigService.evictCache();
+
+        Instant now = Instant.now();
+        RetentionOffer loyaltyOffer = offers.save(new RetentionOffer(
+                UUID.randomUUID(), "POINTS-" + UUID.randomUUID(), RetentionOfferType.LOYALTY_POINTS, Map.of("points", 300), now
+        ));
+        steps.save(new RetentionStep(UUID.randomUUID(), 1, RetentionStepType.SURVEY, null, now));
+        steps.save(new RetentionStep(UUID.randomUUID(), 2, RetentionStepType.OFFER, loyaltyOffer, now));
+        steps.save(new RetentionStep(UUID.randomUUID(), 3, RetentionStepType.CONFIRMATION, null, now));
+
+        UUID customerId = subscriptions.findById(subscriptionId).orElseThrow().getCustomerId();
+
+        CancellationAttempt attempt = flowService.start(subscriptionId);
+        flowService.submitReason(attempt.getId(), "too expensive");
+        flowService.acceptCurrentOffer(attempt.getId());
+
+        assertThat(loyaltyService.getBalance(customerId)).isEqualTo(300);
     }
 
     @Test

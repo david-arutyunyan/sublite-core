@@ -3,6 +3,8 @@ package com.sublite.billing.application;
 import com.sublite.billing.domain.Invoice;
 import com.sublite.billing.domain.PaymentAttempt;
 import com.sublite.billing.infrastructure.InvoiceRepository;
+import com.sublite.loyalty.application.LoyaltyService;
+import com.sublite.loyalty.domain.LoyaltyEventType;
 import com.sublite.subscription.application.SubscriptionLifecycleService;
 import com.sublite.subscription.domain.Subscription;
 import com.sublite.subscription.domain.SubscriptionEvent;
@@ -29,9 +31,13 @@ import java.util.UUID;
  * already-created invoice and retries the charge) rather than losing
  * everything to one rolled-back transaction.
  *
- * Reaches into the subscription module only through its public API
- * (SubscriptionRepository for reads, SubscriptionLifecycleService for state
- * changes) - never through SubscriptionTransitions/SubscriptionState directly.
+ * Reaches into other modules only through their public API - subscription's
+ * SubscriptionRepository (reads) and SubscriptionLifecycleService (state
+ * changes), loyalty's LoyaltyService (awardForEvent) - never through
+ * another module's internal domain classes directly. Called loyaltyService
+ * directly rather than through a port: unlike retention in day 7-8, the
+ * loyalty module actually exists now, so there's no need to decouple from
+ * an implementation that doesn't exist yet.
  */
 @Service
 public class BillingOrchestrator {
@@ -41,6 +47,7 @@ public class BillingOrchestrator {
     private final BillingService billingService;
     private final SubscriptionLifecycleService lifecycle;
     private final RetryPolicy retryPolicy;
+    private final LoyaltyService loyaltyService;
     private final Clock clock;
 
     public BillingOrchestrator(
@@ -49,6 +56,7 @@ public class BillingOrchestrator {
             BillingService billingService,
             SubscriptionLifecycleService lifecycle,
             RetryPolicy retryPolicy,
+            LoyaltyService loyaltyService,
             Clock clock
     ) {
         this.subscriptions = subscriptions;
@@ -56,6 +64,7 @@ public class BillingOrchestrator {
         this.billingService = billingService;
         this.lifecycle = lifecycle;
         this.retryPolicy = retryPolicy;
+        this.loyaltyService = loyaltyService;
         this.clock = clock;
     }
 
@@ -82,6 +91,11 @@ public class BillingOrchestrator {
         if (attempt.succeeded()) {
             Instant newPeriodEnd = now.plus(subscription.getPlanPrice().getBillingPeriod().approximateDuration());
             lifecycle.handle(subscriptionId, new SubscriptionEvent.ChargeSucceeded(newPeriodEnd));
+
+            // Its own step, after the renewal already committed: if awarding
+            // points fails, the subscription stays renewed regardless -
+            // a loyalty hiccup should never be able to undo a real payment.
+            loyaltyService.awardForEvent(subscription.getCustomerId(), LoyaltyEventType.PAYMENT_SUCCESS);
         } else if (retryPolicy.attemptsExhausted(subscription.getFailedChargeAttempts())) {
             lifecycle.handle(subscriptionId, new SubscriptionEvent.GracePeriodExpired());
         } else {

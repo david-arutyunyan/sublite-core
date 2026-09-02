@@ -2,10 +2,10 @@ package com.sublite.retention.application;
 
 import com.sublite.retention.domain.CancellationAttempt;
 import com.sublite.retention.domain.InvalidCancellationStepException;
-import com.sublite.retention.domain.LoyaltyAwarder;
 import com.sublite.retention.domain.RetentionStepType;
 import com.sublite.retention.infrastructure.CancellationAttemptRepository;
 import com.sublite.retention.infrastructure.RetentionOfferRepository;
+import com.sublite.shared.domain.LoyaltyAwarder;
 import com.sublite.subscription.application.SubscriptionLifecycleService;
 import com.sublite.subscription.domain.SubscriptionEvent;
 import com.sublite.subscription.infrastructure.SubscriptionRepository;
@@ -110,7 +110,7 @@ public class RetentionFlowService {
                 UUID customerId = subscriptions.findById(subscriptionId)
                         .orElseThrow(() -> new NoSuchElementException("Subscription not found: " + subscriptionId))
                         .getCustomerId();
-                loyaltyAwarder.award(customerId, intParameter(offer, "points"));
+                loyaltyAwarder.award(customerId, intParameter(offer, "points"), "RETENTION_OFFER_ACCEPTED");
             }
             case DISCOUNT_PERCENT -> {
                 // Recorded via attempt.retain() below but not applied to
