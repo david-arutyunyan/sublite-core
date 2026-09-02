@@ -8,7 +8,6 @@ import com.sublite.subscription.domain.Subscription;
 import com.sublite.subscription.domain.SubscriptionEvent;
 import com.sublite.subscription.infrastructure.SubscriptionRepository;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -16,13 +15,19 @@ import java.util.NoSuchElementException;
 import java.util.UUID;
 
 /**
- * One subscription's billing, start to finish, in one transaction. Called
- * per-subscription from BillingScheduler rather than looping inside a
- * single @Transactional method, so one subscription's failure can't roll
- * back everyone else's, and so this method's @Transactional actually takes
- * effect - calling it from a method in the SAME class (self-invocation)
- * would silently skip the proxy and run without a transaction at all,
- * which is why the loop lives in BillingScheduler instead.
+ * One subscription's billing, as a sequence of separately-committed steps,
+ * NOT one big transaction - deliberately. billingService.chargeInvoice()
+ * inserts the payment attempt in its own REQUIRES_NEW transaction (see
+ * PaymentAttemptWriter), which runs on its own connection and can't see
+ * an invoice this method created but hasn't committed yet; wrapping
+ * everything here in one @Transactional caused exactly that - a foreign
+ * key violation, because the invoice was still uncommitted when the
+ * REQUIRES_NEW insert ran. Each step below commits on its own instead
+ * (Spring Data repository calls are transactional per-call by default),
+ * which also happens to be the right shape for a billing workflow: a
+ * crash between steps is recoverable (the next scheduler run finds the
+ * already-created invoice and retries the charge) rather than losing
+ * everything to one rolled-back transaction.
  *
  * Reaches into the subscription module only through its public API
  * (SubscriptionRepository for reads, SubscriptionLifecycleService for state
@@ -54,9 +59,8 @@ public class BillingOrchestrator {
         this.clock = clock;
     }
 
-    @Transactional
     public void processOne(UUID subscriptionId) {
-        Subscription subscription = subscriptions.findById(subscriptionId)
+        Subscription subscription = subscriptions.findByIdWithPlanPrice(subscriptionId)
                 .orElseThrow(() -> new NoSuchElementException("Subscription not found: " + subscriptionId));
         Instant now = clock.instant();
 
@@ -71,7 +75,9 @@ public class BillingOrchestrator {
                 )));
 
         PaymentAttempt attempt = billingService.chargeInvoice(invoice.getId(), UUID.randomUUID());
+
         subscription.recordChargeAttempt(now);
+        subscriptions.save(subscription);
 
         if (attempt.succeeded()) {
             Instant newPeriodEnd = now.plus(subscription.getPlanPrice().getBillingPeriod().approximateDuration());
