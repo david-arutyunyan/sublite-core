@@ -14,8 +14,13 @@ spring:
 
   flyway:
     enabled: true
-    schemas: shared,subscription,billing
+    schemas: shared,subscription,billing,retention
     default-schema: shared
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
 
 sublite:
   billing:
@@ -24,3 +29,6 @@ sublite:
     retry:
       base-interval: P1D
       max-attempts: 3
+  retention:
+    flow-cache:
+      ttl: PT5M
