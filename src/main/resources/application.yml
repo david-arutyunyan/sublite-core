@@ -14,7 +14,7 @@ spring:
 
   flyway:
     enabled: true
-    schemas: shared,subscription,billing,retention
+    schemas: shared,subscription,billing,retention,loyalty
     default-schema: shared
 
   data:
