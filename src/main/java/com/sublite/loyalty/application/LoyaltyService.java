@@ -10,10 +10,12 @@ import com.sublite.loyalty.infrastructure.LoyaltyRuleRepository;
 import com.sublite.loyalty.infrastructure.LoyaltyTransactionRepository;
 import com.sublite.shared.domain.LoyaltyAwarder;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -26,6 +28,8 @@ import java.util.UUID;
  */
 @Service
 public class LoyaltyService implements LoyaltyAwarder {
+
+    private static final int MAX_CREDIT_ATTEMPTS = 5;
 
     private final LoyaltyAccountRepository accounts;
     private final LoyaltyAccountWriter accountWriter;
@@ -81,13 +85,31 @@ public class LoyaltyService implements LoyaltyAwarder {
         return accounts.findByCustomerId(customerId).map(LoyaltyAccount::getBalance).orElse(0);
     }
 
+    /**
+     * Retries through LoyaltyAccountWriter.creditOnce() (its own fresh
+     * REQUIRES_NEW transaction per attempt - see its javadoc for why that,
+     * not a plain loop, is what actually lets a retry see the other
+     * thread's committed balance) rather than crediting inline here. The
+     * catch has to live HERE, outside creditOnce()'s own transactional
+     * boundary - see creditOnce()'s javadoc for why catching inside it
+     * doesn't work. Five attempts is generous for two threads colliding
+     * once; if it's still losing the race after that many, something is
+     * wrong beyond what a retry can paper over.
+     */
     private void doAward(UUID customerId, int points, String reason) {
-        LoyaltyAccount account = findOrCreateAccount(customerId);
-        account.credit(points, clock.instant());
-        accounts.save(account);
-        transactions.save(new LoyaltyTransaction(
-                UUID.randomUUID(), account, LoyaltyTransactionType.EARN, points, reason, clock.instant()
-        ));
+        UUID accountId = findOrCreateAccount(customerId).getId();
+        Instant now = clock.instant();
+
+        for (int attempt = 1; attempt <= MAX_CREDIT_ATTEMPTS; attempt++) {
+            try {
+                accountWriter.creditOnce(accountId, points, reason, now);
+                return;
+            } catch (ObjectOptimisticLockingFailureException lostRace) {
+                if (attempt == MAX_CREDIT_ATTEMPTS) {
+                    throw lostRace;
+                }
+            }
+        }
     }
 
     private LoyaltyAccount findOrCreateAccount(UUID customerId) {

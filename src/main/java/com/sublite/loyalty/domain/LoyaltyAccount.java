@@ -4,6 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -32,6 +33,16 @@ public class LoyaltyAccount {
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    /**
+     * Optimistic locking - same reasoning as Subscription.version: two
+     * concurrent credit()/debit() calls (see LoyaltyService.doAward()'s
+     * retry loop) must not silently overwrite each other's change to
+     * balance. Added in V24, after balance had already shipped without it.
+     */
+    @Version
+    @Column(nullable = false)
+    private long version;
 
     protected LoyaltyAccount() {
         // JPA
@@ -82,5 +93,9 @@ public class LoyaltyAccount {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public long getVersion() {
+        return version;
     }
 }
