@@ -1,7 +1,9 @@
 package com.sublite.security.application;
 
+import com.sublite.security.domain.EmailAlreadyRegisteredException;
 import com.sublite.security.domain.InvalidCredentialsException;
 import com.sublite.security.infrastructure.JwtProperties;
+import com.sublite.shared.domain.Role;
 import com.sublite.shared.domain.User;
 import com.sublite.shared.infrastructure.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -15,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.UUID;
 
 @Service
 public class AuthService {
@@ -57,6 +60,29 @@ public class AuthService {
             throw new InvalidCredentialsException();
         }
 
+        return issueToken(user);
+    }
+
+    /**
+     * Registers a CUSTOMER account and logs them straight in - one fewer
+     * round trip than register-then-separately-call-/auth/login, and
+     * there's no email verification step in this project to make "you're
+     * registered but not logged in yet" a meaningful intermediate state.
+     */
+    @Transactional
+    public IssuedToken register(String email, String rawPassword) {
+        users.findByEmailIgnoreCase(email).ifPresent(existing -> {
+            throw new EmailAlreadyRegisteredException(email);
+        });
+
+        Instant now = Instant.now(clock);
+        User user = users.save(new User(
+                UUID.randomUUID(), email, Role.CUSTOMER, passwordEncoder.encode(rawPassword), now, now
+        ));
+        return issueToken(user);
+    }
+
+    private IssuedToken issueToken(User user) {
         Instant now = Instant.now(clock);
         Instant expiresAt = now.plus(jwtProperties.accessTokenTtl());
 

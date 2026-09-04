@@ -36,4 +36,14 @@ public interface PlanPriceRepository extends JpaRepository<PlanPrice, UUID> {
             WHERE plan_id = :planId AND billing_period = :billingPeriod AND upper_inf(valid_period)
             """, nativeQuery = true)
     int closeCurrentPrice(@Param("planId") UUID planId, @Param("billingPeriod") String billingPeriod);
+
+    /**
+     * The prices a customer should actually be offered: whichever one is
+     * open-ended right now, per billing period (usually one row for
+     * MONTHLY and one for YEARLY). Same upper_inf() test as
+     * closeCurrentPrice() - see its note on why not "IS NULL".
+     */
+    @Query(value = "SELECT * FROM subscription.plan_prices WHERE plan_id = :planId AND upper_inf(valid_period)",
+            nativeQuery = true)
+    List<PlanPrice> findCurrentPrices(@Param("planId") UUID planId);
 }

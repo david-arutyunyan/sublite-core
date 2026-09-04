@@ -2,6 +2,7 @@ package com.sublite.security.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sublite.security.api.dto.LoginRequest;
+import com.sublite.security.api.dto.RegisterRequest;
 import com.sublite.security.infrastructure.JwtProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,12 +31,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Exercises the real SecurityConfig/JwtConfig (unlike the @WebMvcTest
  * slices elsewhere, which disable the filter chain) - login against the
- * admin user seeded by V23, then use the token against a role-gated
- * endpoint. The CUSTOMER-role case mints its own JWT directly through the
- * same JwtEncoder bean AuthService uses, since customers have no password
- * to log in with in this project (see User.java) - this is still a
- * genuine token the app itself would issue for a customer, just without
- * going through the /auth/login round trip.
+ * admin user seeded by V23, and (since A1) register+login for a fresh
+ * CUSTOMER account. adminEndpointRejectsACustomerToken still mints its
+ * own JWT directly through the JwtEncoder bean rather than registering -
+ * that test only cares that a valid CUSTOMER-role token gets 403 on an
+ * admin endpoint, not about the registration path itself.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -100,6 +100,53 @@ class AuthControllerIT {
 
         mockMvc.perform(get("/admin/plans").header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void registerCreatesACustomerAndLogsThemIn() throws Exception {
+        String email = "customer-" + java.util.UUID.randomUUID() + "@example.com";
+
+        String body = mockMvc.perform(registerRequest(email, "correct-horse-battery"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andReturn().getResponse().getContentAsString();
+        String token = objectMapper.readTree(body).get("accessToken").asText();
+
+        mockMvc.perform(get("/auth/me").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value(email))
+                .andExpect(jsonPath("$.role").value("CUSTOMER"));
+    }
+
+    @Test
+    void registerRejectsADuplicateEmail() throws Exception {
+        String email = "customer-" + java.util.UUID.randomUUID() + "@example.com";
+        mockMvc.perform(registerRequest(email, "correct-horse-battery")).andExpect(status().isCreated());
+
+        mockMvc.perform(registerRequest(email, "a-different-password")).andExpect(status().isConflict());
+    }
+
+    @Test
+    void registerRejectsAShortPassword() throws Exception {
+        mockMvc.perform(registerRequest("customer-" + java.util.UUID.randomUUID() + "@example.com", "short"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void aRegisteredCustomerCannotReachAdminEndpoints() throws Exception {
+        String email = "customer-" + java.util.UUID.randomUUID() + "@example.com";
+        String body = mockMvc.perform(registerRequest(email, "correct-horse-battery"))
+                .andReturn().getResponse().getContentAsString();
+        String token = objectMapper.readTree(body).get("accessToken").asText();
+
+        mockMvc.perform(get("/admin/plans").header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+    }
+
+    private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder registerRequest(String email, String password) throws Exception {
+        return post("/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new RegisterRequest(email, password)));
     }
 
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder loginRequest(String email, String password) throws Exception {
