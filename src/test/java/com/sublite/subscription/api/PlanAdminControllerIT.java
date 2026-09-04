@@ -2,9 +2,9 @@ package com.sublite.subscription.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sublite.shared.api.dto.SetActiveRequest;
 import com.sublite.subscription.api.dto.AddPlanPriceRequest;
 import com.sublite.subscription.api.dto.CreatePlanRequest;
-import com.sublite.subscription.api.dto.SetPlanActiveRequest;
 import com.sublite.subscription.domain.BillingPeriod;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -82,7 +82,7 @@ class PlanAdminControllerIT {
 
         mockMvc.perform(patch("/admin/plans/{id}/active", planId)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new SetPlanActiveRequest(false))))
+                        .content(objectMapper.writeValueAsString(new SetActiveRequest(false))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.active").value(false));
 

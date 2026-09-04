@@ -73,4 +73,8 @@ public class RetentionStep {
     public Instant getCreatedAt() {
         return createdAt;
     }
+
+    public void setActive(boolean active) {
+        this.active = active;
+    }
 }

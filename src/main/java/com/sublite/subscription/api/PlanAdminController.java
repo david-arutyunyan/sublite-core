@@ -1,11 +1,11 @@
 package com.sublite.subscription.api;
 
+import com.sublite.shared.api.dto.SetActiveRequest;
 import com.sublite.shared.domain.Money;
 import com.sublite.subscription.api.dto.AddPlanPriceRequest;
 import com.sublite.subscription.api.dto.CreatePlanRequest;
 import com.sublite.subscription.api.dto.PlanPriceResponse;
 import com.sublite.subscription.api.dto.PlanResponse;
-import com.sublite.subscription.api.dto.SetPlanActiveRequest;
 import com.sublite.subscription.application.PlanAdminService;
 import com.sublite.subscription.domain.Plan;
 import com.sublite.subscription.domain.PlanPrice;
@@ -60,7 +60,7 @@ public class PlanAdminController {
     }
 
     @PatchMapping("/{id}/active")
-    public PlanResponse setActive(@PathVariable UUID id, @Valid @RequestBody SetPlanActiveRequest request) {
+    public PlanResponse setActive(@PathVariable UUID id, @Valid @RequestBody SetActiveRequest request) {
         return PlanResponse.from(service.setActive(id, request.active()));
     }
 

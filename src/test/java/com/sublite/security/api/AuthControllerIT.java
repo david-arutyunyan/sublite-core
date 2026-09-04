@@ -81,26 +81,25 @@ class AuthControllerIT {
     }
 
     @Test
-    void adminPingRequiresAToken() throws Exception {
-        mockMvc.perform(get("/admin/ping"))
+    void adminEndpointRequiresAToken() throws Exception {
+        mockMvc.perform(get("/admin/plans"))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
-    void adminPingRejectsACustomerToken() throws Exception {
+    void adminEndpointRejectsACustomerToken() throws Exception {
         String token = issueToken("customer@example.com", "CUSTOMER");
 
-        mockMvc.perform(get("/admin/ping").header("Authorization", "Bearer " + token))
+        mockMvc.perform(get("/admin/plans").header("Authorization", "Bearer " + token))
                 .andExpect(status().isForbidden());
     }
 
     @Test
-    void adminPingAcceptsAnAdminToken() throws Exception {
+    void adminEndpointAcceptsAnAdminToken() throws Exception {
         String accessToken = login();
 
-        mockMvc.perform(get("/admin/ping").header("Authorization", "Bearer " + accessToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.admin").value(ADMIN_EMAIL));
+        mockMvc.perform(get("/admin/plans").header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk());
     }
 
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder loginRequest(String email, String password) throws Exception {

@@ -12,4 +12,6 @@ public interface RetentionStepRepository extends JpaRepository<RetentionStep, UU
     List<RetentionStep> findByActiveTrueOrderByStepOrderAsc();
 
     Optional<RetentionStep> findFirstByActiveTrueAndStepOrderGreaterThanOrderByStepOrderAsc(int stepOrder);
+
+    boolean existsByStepOrder(int stepOrder);
 }
