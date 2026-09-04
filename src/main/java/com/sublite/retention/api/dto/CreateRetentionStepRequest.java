@@ -1,6 +1,7 @@
 package com.sublite.retention.api.dto;
 
 import com.sublite.retention.domain.RetentionStepType;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
@@ -13,8 +14,8 @@ import java.util.UUID;
  * single-field bean-validation annotation expresses cleanly.
  */
 public record CreateRetentionStepRequest(
-        @NotNull @Min(1) Integer stepOrder,
+        @NotNull @Min(1) @Schema(example = "2") Integer stepOrder,
         @NotNull RetentionStepType type,
-        UUID offerId
+        @Schema(description = "Required when type is OFFER, must be omitted otherwise") UUID offerId
 ) {
 }

@@ -4,6 +4,9 @@ import com.sublite.loyalty.api.dto.LoyaltyRuleResponse;
 import com.sublite.loyalty.api.dto.SetLoyaltyRuleRequest;
 import com.sublite.loyalty.application.LoyaltyRuleAdminService;
 import com.sublite.loyalty.domain.LoyaltyRule;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,6 +23,8 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/admin/loyalty/rules")
+@Tag(name = "Admin: Loyalty", description = "Point-award rules per event type")
+@SecurityRequirement(name = "bearerAuth")
 public class LoyaltyRuleAdminController {
 
     private final LoyaltyRuleAdminService service;
@@ -30,6 +35,9 @@ public class LoyaltyRuleAdminController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Set the active rule for an event type",
+            description = "Deactivates whichever rule currently governs this event type and creates a new "
+                    + "active one - only one active rule per event type is allowed.")
     public LoyaltyRuleResponse setRule(@Valid @RequestBody SetLoyaltyRuleRequest request) {
         LoyaltyRule rule = service.setRule(request.eventType(), request.points());
         return LoyaltyRuleResponse.from(rule);

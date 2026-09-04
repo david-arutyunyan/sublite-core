@@ -9,6 +9,9 @@ import com.sublite.subscription.api.dto.PlanResponse;
 import com.sublite.subscription.application.PlanAdminService;
 import com.sublite.subscription.domain.Plan;
 import com.sublite.subscription.domain.PlanPrice;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,6 +31,8 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/admin/plans")
+@Tag(name = "Admin: Plans", description = "Plan CRUD and price versioning")
+@SecurityRequirement(name = "bearerAuth")
 public class PlanAdminController {
 
     private final PlanAdminService service;
@@ -38,6 +43,8 @@ public class PlanAdminController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Create a plan with its first price",
+            description = "A plan with no price isn't usable, so this creates both together.")
     public PlanResponse create(@Valid @RequestBody CreatePlanRequest request) {
         Plan plan = service.createPlan(
                 request.code(),
@@ -71,6 +78,9 @@ public class PlanAdminController {
 
     @PostMapping("/{id}/prices")
     @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Version the price for a plan/billing period",
+            description = "Closes whatever price is currently open-ended for this plan + billing period "
+                    + "and opens a new one - existing subscriptions keep their own price, unaffected.")
     public PlanPriceResponse addPrice(@PathVariable UUID id, @Valid @RequestBody AddPlanPriceRequest request) {
         PlanPrice price = service.setPrice(id, request.billingPeriod(), new Money(request.amount(), request.currency()));
         return PlanPriceResponse.from(price);
