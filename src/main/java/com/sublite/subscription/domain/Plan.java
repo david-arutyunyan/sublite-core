@@ -74,4 +74,21 @@ public class Plan {
     public Instant getUpdatedAt() {
         return updatedAt;
     }
+
+    /**
+     * Deactivating a plan only hides it from new signups - it never touches
+     * existing subscriptions (those hold their own PlanPrice reference, see
+     * Subscription.planPrice) or their prices. That's the whole point of
+     * price/plan versioning: changing or retiring a plan can't retroactively
+     * change what a current subscriber is paying.
+     */
+    public void deactivate(Instant now) {
+        this.active = false;
+        this.updatedAt = now;
+    }
+
+    public void activate(Instant now) {
+        this.active = true;
+        this.updatedAt = now;
+    }
 }
