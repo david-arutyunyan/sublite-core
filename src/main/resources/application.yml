@@ -2,6 +2,19 @@ spring:
   application:
     name: sublite-core
 
+  threads:
+    virtual:
+      # Every request handler here blocks on I/O at some point - JDBC to
+      # Postgres, a Jedis/Lettuce call to Redis, RandomPaymentGateway's
+      # simulated provider latency - never on CPU-bound work. That's
+      # exactly the case virtual threads help: Tomcat can park a virtual
+      # thread on a blocking call almost for free and keep serving other
+      # requests, instead of one platform thread (expensive, OS-backed)
+      # sitting idle per in-flight request. No code changes needed
+      # elsewhere - the same blocking JDBC/Jedis calls just run on a
+      # virtual thread now.
+      enabled: true
+
   # Host/port/credentials come from env vars (12-factor: where to connect
   # is deployment config, not a profile) - defaults are for local dev
   # against docker-compose.yml's plain postgres/redis services. The

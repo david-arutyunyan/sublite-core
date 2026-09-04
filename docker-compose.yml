@@ -25,5 +25,33 @@ services:
       timeout: 5s
       retries: 10
 
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      # "docker" profile: structured JSON console logs instead of the
+      # human-readable dev pattern (see application-docker.yml). DB_HOST/
+      # REDIS_HOST override application.yml's localhost defaults to the
+      # other services' names on the compose network - no profile needed
+      # for that half, connectivity is plain env-var config (12-factor).
+      SPRING_PROFILES_ACTIVE: docker
+      DB_HOST: postgres
+      REDIS_HOST: redis
+      # No SUBLITE_JWT_SECRET here on purpose: application.yml's baked-in
+      # dev default is fine for `docker compose up` out of the box. A
+      # real deployment overrides it via this same env var.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
 volumes:
   postgres_data:
