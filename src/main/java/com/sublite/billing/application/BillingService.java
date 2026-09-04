@@ -2,6 +2,7 @@ package com.sublite.billing.application;
 
 import com.sublite.billing.domain.ChargeResult;
 import com.sublite.billing.domain.Invoice;
+import com.sublite.billing.domain.InvoiceStatus;
 import com.sublite.billing.domain.PaymentAttempt;
 import com.sublite.billing.domain.PaymentAttemptStatus;
 import com.sublite.billing.domain.PaymentGateway;
@@ -16,10 +17,22 @@ import java.util.NoSuchElementException;
 import java.util.UUID;
 
 /**
- * chargeInvoice() is idempotent in two layers:
- *  1. the up-front findByIdempotencyKey check is an optimization - skip
- *     calling the gateway at all if we already know the answer.
- *  2. PaymentAttemptWriter.insert() is what's actually correct under a
+ * chargeInvoice() is idempotent in three layers:
+ *  1. the invoice.getStatus() == PAID check below is the outermost guard:
+ *     an invoice that's already been successfully charged must never be
+ *     charged again, no matter why chargeInvoice() got called a second
+ *     time for it (a scheduler misfire, a future manual "retry billing"
+ *     admin action, anything). This is deliberately NOT "status must be
+ *     PENDING" - a PENDING invoice legitimately gets charged again on
+ *     every scheduler retry after a decline, and that's correct.
+ *  2. the up-front findByIdempotencyKey check is an optimization within
+ *     ONE logical charge attempt - skip calling the gateway at all if
+ *     this exact call already ran. It deliberately does NOT protect
+ *     across separate retries of the same invoice: idempotencyKey is a
+ *     fresh UUID per call (see BillingOrchestrator.processOne()) exactly
+ *     so a retry after a decline can actually attempt a new charge
+ *     instead of replaying the old failure forever.
+ *  3. PaymentAttemptWriter.insert() is what's actually correct under a
  *     race: if two callers both miss the check above, the DB's unique
  *     index on idempotency_key lets only one INSERT through. The loser
  *     catches DataIntegrityViolationException here and re-reads the
@@ -64,6 +77,11 @@ public class BillingService {
 
         Invoice invoice = invoices.findById(invoiceId)
                 .orElseThrow(() -> new NoSuchElementException("Invoice not found: " + invoiceId));
+
+        if (invoice.getStatus() == InvoiceStatus.PAID) {
+            return paymentAttempts.findByInvoiceIdAndStatus(invoiceId, PaymentAttemptStatus.SUCCEEDED)
+                    .orElseThrow(() -> new IllegalStateException("Invoice " + invoiceId + " is PAID but has no SUCCEEDED payment attempt"));
+        }
 
         ChargeResult result = gateway.charge(idempotencyKey, invoice.getAmount());
 
