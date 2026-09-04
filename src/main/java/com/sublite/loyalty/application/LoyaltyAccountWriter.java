@@ -70,4 +70,25 @@ class LoyaltyAccountWriter {
                 UUID.randomUUID(), account, LoyaltyTransactionType.EARN, points, reason, now
         ));
     }
+
+    /**
+     * Mirrors creditOnce() exactly, for the same reason (see its javadoc):
+     * REQUIRES_NEW so a retry actually sees the other thread's committed
+     * balance, and ObjectOptimisticLockingFailureException deliberately
+     * NOT caught here so LoyaltyService.redeem()'s retry loop can recover
+     * outside this transaction's boundary. account.debit() can also throw
+     * InsufficientLoyaltyPointsException - that one's a genuine business
+     * rule, not a race, so it's fine for it to propagate straight out;
+     * nothing has been written yet when it's thrown, so this transaction
+     * has nothing to roll back beyond the no-op it already is.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void debitOnce(UUID accountId, int points, String reason, Instant now) {
+        LoyaltyAccount account = accounts.findById(accountId).orElseThrow();
+        account.debit(points, now);
+        accounts.saveAndFlush(account);
+        transactions.save(new LoyaltyTransaction(
+                UUID.randomUUID(), account, LoyaltyTransactionType.REDEEM, points, reason, now
+        ));
+    }
 }

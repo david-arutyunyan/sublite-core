@@ -141,6 +141,36 @@ class LoyaltyServiceIT {
         assertThat(loyaltyService.getBalance(customerId)).isEqualTo(200);
     }
 
+    /**
+     * Same race as concurrentFirstAwardsForTheSameCustomerDoNotCreateDuplicateAccounts,
+     * but on redeem() - proves LoyaltyAccountWriter.debitOnce()'s retry
+     * (added alongside creditOnce()'s, which redeem() didn't have before)
+     * actually recovers from a lost @Version race instead of letting one
+     * of the two redemptions fail outright with
+     * ObjectOptimisticLockingFailureException.
+     */
+    @Test
+    void concurrentRedeemsForTheSameCustomerBothSucceedAndBalanceReflectsBoth() throws Exception {
+        UUID customerId = newCustomer();
+        loyaltyService.award(customerId, 200, "SEED");
+        CyclicBarrier bothReady = new CyclicBarrier(2);
+
+        Callable<Void> redeemTask = () -> {
+            bothReady.await();
+            loyaltyService.redeem(customerId, 50, "CONCURRENT_REDEEM");
+            return null;
+        };
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        List<Future<Void>> results = pool.invokeAll(List.of(redeemTask, redeemTask));
+        pool.shutdown();
+        for (Future<Void> result : results) {
+            result.get();
+        }
+
+        assertThat(loyaltyService.getBalance(customerId)).isEqualTo(100);
+    }
+
     private UUID newCustomer() {
         Instant now = Instant.now();
         User user = users.save(new User(UUID.randomUUID(), "test-" + UUID.randomUUID() + "@example.com", now, now));

@@ -4,7 +4,6 @@ import com.sublite.loyalty.domain.InsufficientLoyaltyPointsException;
 import com.sublite.loyalty.domain.LoyaltyAccount;
 import com.sublite.loyalty.domain.LoyaltyEventType;
 import com.sublite.loyalty.domain.LoyaltyTransaction;
-import com.sublite.loyalty.domain.LoyaltyTransactionType;
 import com.sublite.loyalty.infrastructure.LoyaltyAccountRepository;
 import com.sublite.loyalty.infrastructure.LoyaltyRuleRepository;
 import com.sublite.loyalty.infrastructure.LoyaltyTransactionRepository;
@@ -73,17 +72,30 @@ public class LoyaltyService implements LoyaltyAwarder {
                 .ifPresent(rule -> doAward(customerId, rule.getPoints(), eventType.name()));
     }
 
+    /**
+     * Same REQUIRES_NEW-per-attempt retry as doAward() below, for the same
+     * reason: two redeem calls racing on the same @Version-protected
+     * account used to just let the loser's ObjectOptimisticLockingFailureException
+     * propagate straight to the caller instead of retrying it, unlike
+     * every other write to this entity.
+     */
     @Transactional
     public void redeem(UUID customerId, int points, String reason) {
-        LoyaltyAccount account = accounts.findByCustomerId(customerId)
-                .orElseThrow(() -> new InsufficientLoyaltyPointsException(customerId, points, 0));
+        UUID accountId = accounts.findByCustomerId(customerId)
+                .orElseThrow(() -> new InsufficientLoyaltyPointsException(customerId, points, 0))
+                .getId();
 
-        account.debit(points, clock.instant());
-        accounts.save(account);
-        transactions.save(new LoyaltyTransaction(
-                UUID.randomUUID(), account, LoyaltyTransactionType.REDEEM, points, reason, clock.instant()
-        ));
-        log.info("Loyalty points redeemed: customerId={}, points={}, reason={}", customerId, points, reason);
+        for (int attempt = 1; attempt <= MAX_CREDIT_ATTEMPTS; attempt++) {
+            try {
+                accountWriter.debitOnce(accountId, points, reason, clock.instant());
+                log.info("Loyalty points redeemed: customerId={}, points={}, reason={}", customerId, points, reason);
+                return;
+            } catch (ObjectOptimisticLockingFailureException lostRace) {
+                if (attempt == MAX_CREDIT_ATTEMPTS) {
+                    throw lostRace;
+                }
+            }
+        }
     }
 
     @Transactional(readOnly = true)
