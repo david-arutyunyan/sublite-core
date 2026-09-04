@@ -199,6 +199,18 @@ erDiagram
 - Структурированные JSON-логи (ECS-формат) включаются профилем `docker` (см. `SPRING_PROFILES_ACTIVE` в `docker-compose.yml`); при локальной разработке — обычный читаемый вывод в консоль. Каждая строка лога несёт `correlationId` (генерируется на входе в `CorrelationIdFilter`, эхом уходит в заголовке `X-Correlation-Id`).
 - При запуске без Docker (`./mvnw spring-boot:run`) логи дополнительно пишутся в файл `logs/app.log` (с ротацией: до 10 МБ на файл, 7 файлов истории, 100 МБ суммарно) — внутри контейнера файла нет намеренно, там только stdout (`application-docker.yml` явно отключает файловый вывод).
 
+### Централизованные логи (Loki)
+
+Отдельный compose-оверлей (`docker-compose.observability.yml`), не часть основного `docker compose up` — Grafana/Loki/Promtail не нужны для обычной разработки:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+```
+
+Promtail подключается к Docker-сокету (`docker_sd_configs`), сам находит все контейнеры проекта и раскладывает логи по лейблу `service` прямо из `com.docker.compose.service` — без единой строчки ручной конфигурации на контейнер. В Grafana (`http://localhost:3000`, анонимный вход только для локального дева) логи каждого сервиса смотрятся отдельным запросом: `{service="app"}`, `{service="postgres"}`, `{service="redis"}`. Хранение — 30 дней (`limits_config.retention_period` в `observability/loki-config.yml`, реально удаляет старые чанки только вместе с `compactor.retention_enabled: true`).
+
+По умолчанию postgres и redis почти ничего не пишут в лог — добавлены явные флаги: postgres логирует connect/disconnect и все изменяющие данные операторы (`log_statement=mod`) плюс медленные запросы (`log_min_duration_statement=200`), redis поднят на `--loglevel verbose` (события persistence/репликации, не построчный лог команд — для этого пришлось бы держать включённым `MONITOR`, а это отдельный debug-инструмент, не то, что стоит гонять постоянно).
+
 ## CI/CD
 
 `.github/workflows/ci.yml`: на каждый push/PR в `master` — `./mvnw verify` (unit + integration на настоящих Postgres/Redis через Testcontainers, GitHub-раннеры идут с Docker из коробки) и сборка Docker-образа (без публикации куда-либо — registry для pet-проекта не нужен).

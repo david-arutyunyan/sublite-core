@@ -1,0 +1,44 @@
+# docker_sd_configs (not a static file glob) is what gives each stream a
+# `service` label straight from Docker Compose's own
+# com.docker.compose.service label - that's the "separately by app,
+# separately by postgres, separately by redis" split, queryable in Grafana
+# as {service="app"} / {service="postgres"} / {service="redis"} without
+# any manual per-container config.
+#
+# Deliberately NO `docker: {}` pipeline stage here, even though every
+# tutorial for reading Docker logs shows one: that stage exists to unwrap
+# Docker's json-file envelope ({"log":"...","stream":...,"time":...}), but
+# a docker_sd_configs target already does that unwrapping itself before
+# any pipeline_stages run. Adding the stage anyway doesn't error - it
+# just runs a SECOND "extract top-level log key" pass against the
+# already-unwrapped app line, and this app's own JSON output happens to
+# have a top-level "log" key of its own (log.level/log.logger, per ECS -
+# see application-docker.yml), so that second pass silently replaced
+# every line with just {"level":...,"logger":...} instead of the real
+# message/correlationId/etc. Confirmed by pushing straight to Loki's
+# HTTP API (bypassing Promtail entirely) and reading the raw on-disk
+# json-file content directly inside the Promtail container - both had the
+# full line; only the extra unwrap stage lost it.
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+        target_label: 'service'
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
+        target_label: 'project'
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'container'

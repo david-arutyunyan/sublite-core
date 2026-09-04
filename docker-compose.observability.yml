@@ -1,0 +1,52 @@
+# A separate overlay, not merged into docker-compose.yml, on purpose:
+# the core app/postgres/redis stack should stay the fast, minimal thing
+# `docker compose up` boots for local dev, not grow a Grafana/Loki/
+# Promtail startup tax every time. Bring both up together with:
+#   docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+# (same compose project, so this shares app/postgres/redis's network -
+# `loki:3100` resolves from inside promtail without any extra config).
+services:
+  loki:
+    image: grafana/loki:3.1.1
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./observability/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+
+  promtail:
+    image: grafana/promtail:3.1.1
+    volumes:
+      - ./observability/promtail-config.yml:/etc/promtail/config.yml:ro
+      # Both mounts are needed: the socket is how Promtail discovers
+      # which containers exist and reads their compose service/project
+      # labels, the containers directory is where it actually reads each
+      # one's json-file log content from.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    ports:
+      - "3000:3000"
+    environment:
+      # Local-only observability tooling, never exposed beyond
+      # localhost - anonymous admin access trades the login screen for
+      # convenience here on purpose. Never do this for anything reachable
+      # off this machine.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./observability/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - loki
+
+volumes:
+  loki_data:
+  grafana_data:
