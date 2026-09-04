@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sublite.retention.application.RetentionCacheProperties;
 import com.sublite.retention.application.RetentionFlowConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -20,6 +22,8 @@ import java.util.Optional;
 @Component
 public class RetentionFlowCache {
 
+    private static final Logger log = LoggerFactory.getLogger(RetentionFlowCache.class);
+
     private static final String CACHE_KEY = "retention:active-flow";
 
     private final StringRedisTemplate redis;
@@ -35,11 +39,14 @@ public class RetentionFlowCache {
     public Optional<RetentionFlowConfig> get() {
         String json = redis.opsForValue().get(CACHE_KEY);
         if (json == null) {
+            log.info("Retention flow cache miss: key={}", CACHE_KEY);
             return Optional.empty();
         }
         try {
+            log.info("Retention flow cache hit: key={}", CACHE_KEY);
             return Optional.of(objectMapper.readValue(json, RetentionFlowConfig.class));
         } catch (JsonProcessingException corrupted) {
+            log.warn("Retention flow cache entry was corrupted, treating as a miss: key={}", CACHE_KEY, corrupted);
             return Optional.empty();
         }
     }
@@ -47,6 +54,7 @@ public class RetentionFlowCache {
     public void put(RetentionFlowConfig config) {
         try {
             redis.opsForValue().set(CACHE_KEY, objectMapper.writeValueAsString(config), properties.ttl());
+            log.info("Retention flow cache populated: key={}, ttl={}", CACHE_KEY, properties.ttl());
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to serialize retention flow config for caching", e);
         }
@@ -54,5 +62,6 @@ public class RetentionFlowCache {
 
     public void evict() {
         redis.delete(CACHE_KEY);
+        log.info("Retention flow cache evicted: key={}", CACHE_KEY);
     }
 }
