@@ -3,6 +3,8 @@ package com.sublite.loyalty.application;
 import com.sublite.loyalty.domain.LoyaltyEventType;
 import com.sublite.loyalty.domain.LoyaltyRule;
 import com.sublite.loyalty.infrastructure.LoyaltyRuleRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +21,8 @@ import java.util.UUID;
  */
 @Service
 public class LoyaltyRuleAdminService {
+
+    private static final Logger log = LoggerFactory.getLogger(LoyaltyRuleAdminService.class);
 
     private final LoyaltyRuleRepository rules;
     private final Clock clock;
@@ -38,7 +42,9 @@ public class LoyaltyRuleAdminService {
     @Transactional
     public LoyaltyRule setRule(LoyaltyEventType eventType, int points) {
         rules.deactivateActive(eventType);
-        return rules.save(new LoyaltyRule(UUID.randomUUID(), eventType, points, Instant.now(clock)));
+        LoyaltyRule rule = rules.save(new LoyaltyRule(UUID.randomUUID(), eventType, points, Instant.now(clock)));
+        log.info("Loyalty rule set: eventType={}, points={}", eventType, points);
+        return rule;
     }
 
     @Transactional(readOnly = true)

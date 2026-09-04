@@ -6,6 +6,8 @@ import com.sublite.security.infrastructure.JwtProperties;
 import com.sublite.shared.domain.Role;
 import com.sublite.shared.domain.User;
 import com.sublite.shared.infrastructure.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
@@ -21,6 +23,8 @@ import java.util.UUID;
 
 @Service
 public class AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final UserRepository users;
     private final PasswordEncoder passwordEncoder;
@@ -57,9 +61,11 @@ public class AuthService {
 
         boolean matches = passwordEncoder.matches(rawPassword, hashToCheck);
         if (user == null || user.getPasswordHash() == null || !matches) {
+            log.warn("Login failed: email={}", email);
             throw new InvalidCredentialsException();
         }
 
+        log.info("Login succeeded: userId={}, email={}", user.getId(), email);
         return issueToken(user);
     }
 
@@ -79,6 +85,7 @@ public class AuthService {
         User user = users.save(new User(
                 UUID.randomUUID(), email, Role.CUSTOMER, passwordEncoder.encode(rawPassword), now, now
         ));
+        log.info("Registered new customer: userId={}, email={}", user.getId(), email);
         return issueToken(user);
     }
 

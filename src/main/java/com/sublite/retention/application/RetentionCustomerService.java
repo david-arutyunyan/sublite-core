@@ -6,6 +6,8 @@ import com.sublite.retention.infrastructure.CancellationAttemptRepository;
 import com.sublite.subscription.domain.Subscription;
 import com.sublite.subscription.domain.SubscriptionNotFoundException;
 import com.sublite.subscription.infrastructure.SubscriptionRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +28,8 @@ import java.util.UUID;
 @Service
 public class RetentionCustomerService {
 
+    private static final Logger log = LoggerFactory.getLogger(RetentionCustomerService.class);
+
     private final RetentionFlowService flowService;
     private final CancellationAttemptRepository attempts;
     private final SubscriptionRepository subscriptions;
@@ -43,7 +47,9 @@ public class RetentionCustomerService {
     @Transactional
     public CancellationAttempt start(UUID customerId, UUID subscriptionId) {
         requireOwnSubscription(customerId, subscriptionId);
-        return flowService.start(subscriptionId);
+        CancellationAttempt attempt = flowService.start(subscriptionId);
+        log.info("Cancellation flow started: customerId={}, subscriptionId={}, attemptId={}", customerId, subscriptionId, attempt.getId());
+        return attempt;
     }
 
     @Transactional(readOnly = true)
@@ -60,19 +66,25 @@ public class RetentionCustomerService {
     @Transactional
     public CancellationAttempt acceptCurrentOffer(UUID customerId, UUID attemptId) {
         requireOwnAttempt(customerId, attemptId);
-        return flowService.acceptCurrentOffer(attemptId);
+        CancellationAttempt attempt = flowService.acceptCurrentOffer(attemptId);
+        log.info("Retention offer accepted: customerId={}, attemptId={}, offerId={}", customerId, attemptId, attempt.getAcceptedOffer().getId());
+        return attempt;
     }
 
     @Transactional
     public CancellationAttempt declineCurrentOffer(UUID customerId, UUID attemptId) {
         requireOwnAttempt(customerId, attemptId);
+        log.info("Retention offer declined: customerId={}, attemptId={}", customerId, attemptId);
         return flowService.declineCurrentOffer(attemptId);
     }
 
     @Transactional
     public CancellationAttempt confirmCancellation(UUID customerId, UUID attemptId) {
         requireOwnAttempt(customerId, attemptId);
-        return flowService.confirmCancellation(attemptId);
+        CancellationAttempt attempt = flowService.confirmCancellation(attemptId);
+        log.info("Subscription cancelled via retention flow: customerId={}, attemptId={}, subscriptionId={}",
+                customerId, attemptId, attempt.getSubscriptionId());
+        return attempt;
     }
 
     /**

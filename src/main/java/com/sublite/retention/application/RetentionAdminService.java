@@ -11,6 +11,8 @@ import com.sublite.retention.domain.RetentionStepRequiresOfferException;
 import com.sublite.retention.domain.RetentionStepType;
 import com.sublite.retention.infrastructure.RetentionOfferRepository;
 import com.sublite.retention.infrastructure.RetentionStepRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +32,8 @@ import java.util.UUID;
  */
 @Service
 public class RetentionAdminService {
+
+    private static final Logger log = LoggerFactory.getLogger(RetentionAdminService.class);
 
     private final RetentionOfferRepository offers;
     private final RetentionStepRepository steps;
@@ -56,6 +60,7 @@ public class RetentionAdminService {
 
         RetentionOffer offer = offers.save(new RetentionOffer(UUID.randomUUID(), code, type, parameters, Instant.now(clock)));
         flowConfigService.evictCache();
+        log.info("Retention offer created: offerId={}, code={}, type={}", offer.getId(), code, type);
         return offer;
     }
 
@@ -75,6 +80,7 @@ public class RetentionAdminService {
 
         RetentionStep step = steps.save(new RetentionStep(UUID.randomUUID(), stepOrder, type, offer, Instant.now(clock)));
         flowConfigService.evictCache();
+        log.info("Retention step created: stepId={}, stepOrder={}, type={}, offerId={}", step.getId(), stepOrder, type, offerId);
         return step;
     }
 
@@ -83,6 +89,7 @@ public class RetentionAdminService {
         RetentionStep step = steps.findById(stepId).orElseThrow(() -> new RetentionStepNotFoundException(stepId));
         step.setActive(active);
         flowConfigService.evictCache();
+        log.info("Retention step {}: stepId={}", active ? "activated" : "deactivated", stepId);
         return step;
     }
 

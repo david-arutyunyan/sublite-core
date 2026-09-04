@@ -8,6 +8,8 @@ import com.sublite.subscription.domain.PlanNotFoundException;
 import com.sublite.subscription.domain.PlanPrice;
 import com.sublite.subscription.infrastructure.PlanPriceRepository;
 import com.sublite.subscription.infrastructure.PlanRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +20,8 @@ import java.util.UUID;
 
 @Service
 public class PlanAdminService {
+
+    private static final Logger log = LoggerFactory.getLogger(PlanAdminService.class);
 
     private final PlanRepository plans;
     private final PlanPriceRepository planPrices;
@@ -42,6 +46,7 @@ public class PlanAdminService {
 
         Plan plan = plans.save(new Plan(UUID.randomUUID(), code, name, description, Instant.now(clock)));
         planPrices.save(new PlanPrice(UUID.randomUUID(), plan, billingPeriod, price, Instant.now(clock)));
+        log.info("Plan created: planId={}, code={}, billingPeriod={}, amount={}", plan.getId(), code, billingPeriod, price.amount());
         return plan;
     }
 
@@ -56,7 +61,9 @@ public class PlanAdminService {
     public PlanPrice setPrice(UUID planId, BillingPeriod billingPeriod, Money price) {
         Plan plan = requirePlan(planId);
         planPrices.closeCurrentPrice(planId, billingPeriod.name());
-        return planPrices.save(new PlanPrice(UUID.randomUUID(), plan, billingPeriod, price, Instant.now(clock)));
+        PlanPrice newPrice = planPrices.save(new PlanPrice(UUID.randomUUID(), plan, billingPeriod, price, Instant.now(clock)));
+        log.info("Plan price added: planId={}, billingPeriod={}, amount={}", planId, billingPeriod, price.amount());
+        return newPrice;
     }
 
     @Transactional
@@ -67,6 +74,7 @@ public class PlanAdminService {
         } else {
             plan.deactivate(Instant.now(clock));
         }
+        log.info("Plan {}: planId={}", active ? "activated" : "deactivated", planId);
         return plan;
     }
 

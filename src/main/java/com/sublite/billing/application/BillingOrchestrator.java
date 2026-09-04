@@ -9,6 +9,8 @@ import com.sublite.subscription.application.SubscriptionLifecycleService;
 import com.sublite.subscription.domain.Subscription;
 import com.sublite.subscription.domain.SubscriptionEvent;
 import com.sublite.subscription.infrastructure.SubscriptionRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -41,6 +43,8 @@ import java.util.UUID;
  */
 @Service
 public class BillingOrchestrator {
+
+    private static final Logger log = LoggerFactory.getLogger(BillingOrchestrator.class);
 
     private final SubscriptionRepository subscriptions;
     private final InvoiceRepository invoices;
@@ -91,14 +95,19 @@ public class BillingOrchestrator {
         if (attempt.succeeded()) {
             Instant newPeriodEnd = now.plus(subscription.getPlanPrice().getBillingPeriod().approximateDuration());
             lifecycle.handle(subscriptionId, new SubscriptionEvent.ChargeSucceeded(newPeriodEnd));
+            log.info("Charge succeeded: subscriptionId={}, invoiceId={}, newPeriodEnd={}", subscriptionId, invoice.getId(), newPeriodEnd);
 
             // Its own step, after the renewal already committed: if awarding
             // points fails, the subscription stays renewed regardless -
             // a loyalty hiccup should never be able to undo a real payment.
             loyaltyService.awardForEvent(subscription.getCustomerId(), LoyaltyEventType.PAYMENT_SUCCESS);
         } else if (retryPolicy.attemptsExhausted(subscription.getFailedChargeAttempts())) {
+            log.warn("Charge failed and retries exhausted, entering grace period: subscriptionId={}, invoiceId={}, failedAttempts={}",
+                    subscriptionId, invoice.getId(), subscription.getFailedChargeAttempts());
             lifecycle.handle(subscriptionId, new SubscriptionEvent.GracePeriodExpired());
         } else {
+            log.warn("Charge failed, will retry: subscriptionId={}, invoiceId={}, failedAttempts={}",
+                    subscriptionId, invoice.getId(), subscription.getFailedChargeAttempts());
             lifecycle.handle(subscriptionId, new SubscriptionEvent.ChargeFailed());
         }
     }

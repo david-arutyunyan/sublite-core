@@ -8,6 +8,8 @@ import com.sublite.subscription.domain.Subscription;
 import com.sublite.subscription.domain.SubscriptionStatus;
 import com.sublite.subscription.infrastructure.PlanPriceRepository;
 import com.sublite.subscription.infrastructure.SubscriptionRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
@@ -30,6 +32,8 @@ import java.util.UUID;
  */
 @Service
 public class SubscriptionPurchaseService {
+
+    private static final Logger log = LoggerFactory.getLogger(SubscriptionPurchaseService.class);
 
     private static final List<SubscriptionStatus> LIVE_STATUSES = List.of(
             SubscriptionStatus.TRIAL, SubscriptionStatus.ACTIVE, SubscriptionStatus.GRACE_PERIOD, SubscriptionStatus.PAUSED
@@ -68,6 +72,7 @@ public class SubscriptionPurchaseService {
      */
     public Subscription purchase(UUID customerId, UUID planPriceId) {
         UUID subscriptionId = createSubscription(customerId, planPriceId);
+        log.info("Subscription created: customerId={}, subscriptionId={}, planPriceId={}", customerId, subscriptionId, planPriceId);
         billingOrchestrator.processOne(subscriptionId);
         return subscriptions.findByIdWithPlanPrice(subscriptionId).orElseThrow();
     }

@@ -9,6 +9,8 @@ import com.sublite.loyalty.infrastructure.LoyaltyAccountRepository;
 import com.sublite.loyalty.infrastructure.LoyaltyRuleRepository;
 import com.sublite.loyalty.infrastructure.LoyaltyTransactionRepository;
 import com.sublite.shared.domain.LoyaltyAwarder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
@@ -29,6 +31,8 @@ import java.util.UUID;
  */
 @Service
 public class LoyaltyService implements LoyaltyAwarder {
+
+    private static final Logger log = LoggerFactory.getLogger(LoyaltyService.class);
 
     private static final int MAX_CREDIT_ATTEMPTS = 5;
 
@@ -79,6 +83,7 @@ public class LoyaltyService implements LoyaltyAwarder {
         transactions.save(new LoyaltyTransaction(
                 UUID.randomUUID(), account, LoyaltyTransactionType.REDEEM, points, reason, clock.instant()
         ));
+        log.info("Loyalty points redeemed: customerId={}, points={}, reason={}", customerId, points, reason);
     }
 
     @Transactional(readOnly = true)
@@ -111,6 +116,7 @@ public class LoyaltyService implements LoyaltyAwarder {
         for (int attempt = 1; attempt <= MAX_CREDIT_ATTEMPTS; attempt++) {
             try {
                 accountWriter.creditOnce(accountId, points, reason, now);
+                log.info("Loyalty points awarded: customerId={}, points={}, reason={}", customerId, points, reason);
                 return;
             } catch (ObjectOptimisticLockingFailureException lostRace) {
                 if (attempt == MAX_CREDIT_ATTEMPTS) {
