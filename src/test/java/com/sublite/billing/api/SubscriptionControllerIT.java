@@ -27,6 +27,7 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -101,6 +102,22 @@ class SubscriptionControllerIT {
     }
 
     @Test
+    void purchaseOfADeactivatedPlanIsRejected() throws Exception {
+        String adminToken = adminToken();
+        String planCode = "plan-" + UUID.randomUUID();
+        UUID planPriceId = createPlanAsAdmin(planCode);
+        UUID planId = planIdForCode(adminToken, planCode);
+        mockMvc.perform(patch("/admin/plans/{id}/active", planId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"active\":false}"))
+                .andExpect(status().isOk());
+        String customerToken = registerCustomer();
+
+        mockMvc.perform(purchaseRequest(customerToken, planPriceId)).andExpect(status().isNotFound());
+    }
+
+    @Test
     void purchaseWithoutATokenIsRejected() throws Exception {
         UUID planPriceId = createPlanAsAdmin();
 
@@ -148,16 +165,31 @@ class SubscriptionControllerIT {
         return objectMapper.readTree(body).get("accessToken").asText();
     }
 
+    private String adminToken() throws Exception {
+        String adminBody = mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoginRequest(ADMIN_EMAIL, ADMIN_PASSWORD))))
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(adminBody).get("accessToken").asText();
+    }
+
+    private UUID planIdForCode(String adminToken, String code) throws Exception {
+        String listBody = mockMvc.perform(get("/admin/plans").header("Authorization", "Bearer " + adminToken))
+                .andReturn().getResponse().getContentAsString();
+        for (var node : objectMapper.readTree(listBody)) {
+            if (node.get("code").asText().equals(code)) {
+                return UUID.fromString(node.get("id").asText());
+            }
+        }
+        throw new IllegalStateException("No plan with code " + code);
+    }
+
     private UUID createPlanAsAdmin() throws Exception {
         return createPlanAsAdmin("plan-" + UUID.randomUUID());
     }
 
     private UUID createPlanAsAdmin(String code) throws Exception {
-        String adminBody = mockMvc.perform(post("/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new LoginRequest(ADMIN_EMAIL, ADMIN_PASSWORD))))
-                .andReturn().getResponse().getContentAsString();
-        String adminToken = objectMapper.readTree(adminBody).get("accessToken").asText();
+        String adminToken = adminToken();
 
         CreatePlanRequest request = new CreatePlanRequest(
                 code, "Plus", "desc", BillingPeriod.MONTHLY, new BigDecimal("9.99"), "USD");

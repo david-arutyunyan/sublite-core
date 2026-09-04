@@ -7,11 +7,23 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface PlanPriceRepository extends JpaRepository<PlanPrice, UUID> {
 
     List<PlanPrice> findByPlanIdOrderByCreatedAtDesc(UUID planId);
+
+    /**
+     * plan is FetchType.LAZY (PlanPrice.plan) - callers that need to read
+     * anything off the plan itself (not just the price) have to ask for it
+     * eagerly like this, or hit LazyInitializationException the moment
+     * they touch it outside whatever transaction loaded the PlanPrice -
+     * see SubscriptionPurchaseService.createSubscription(), which isn't
+     * itself @Transactional (see its class javadoc for why not).
+     */
+    @Query("SELECT pp FROM PlanPrice pp JOIN FETCH pp.plan WHERE pp.id = :id")
+    Optional<PlanPrice> findByIdWithPlan(@Param("id") UUID id);
 
     /**
      * The other half of price versioning (see PlanAdminService.setPrice()):

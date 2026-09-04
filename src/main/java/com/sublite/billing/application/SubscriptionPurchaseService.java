@@ -78,8 +78,17 @@ public class SubscriptionPurchaseService {
     }
 
     private UUID createSubscription(UUID customerId, UUID planPriceId) {
-        PlanPrice planPrice = planPrices.findById(planPriceId)
+        PlanPrice planPrice = planPrices.findByIdWithPlan(planPriceId)
                 .orElseThrow(() -> new PlanPriceNotFoundException(planPriceId));
+        // A deactivated plan's prices still exist (see Plan.deactivate()'s
+        // own javadoc - existing subscribers keep their price unaffected),
+        // but it's no longer purchasable by anyone new. Same exception as
+        // "no such price" rather than a distinct "plan inactive" one: from
+        // a customer's perspective (who may have this id from a stale
+        // /plans response) the two look identical - nothing to buy here.
+        if (!planPrice.getPlan().isActive()) {
+            throw new PlanPriceNotFoundException(planPriceId);
+        }
 
         Instant now = Instant.now(clock);
         Instant periodEnd = now.plus(planPrice.getBillingPeriod().approximateDuration());
