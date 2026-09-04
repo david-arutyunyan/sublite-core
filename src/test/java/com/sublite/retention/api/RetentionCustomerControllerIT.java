@@ -35,9 +35,16 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -160,6 +167,65 @@ class RetentionCustomerControllerIT {
 
         mockMvc.perform(post("/cancellation/{id}/confirm", attemptId).header("Authorization", "Bearer " + token))
                 .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * Two separate CancellationAttempt rows against the SAME subscription
+     * (nothing stops a customer starting a second attempt while the first
+     * is still open - e.g. two browser tabs), both walked to CONFIRMATION,
+     * then both confirmed at (as close to) the same instant. Both confirms
+     * call SubscriptionLifecycleService.handle() on the same Subscription
+     * row, so this is the same @Version race as
+     * SubscriptionConcurrentUpdateTest, exercised through the real HTTP
+     * layer instead of the service directly - proving
+     * GlobalApiExceptionHandler actually turns the loser's
+     * ObjectOptimisticLockingFailureException into a clean 409 instead of
+     * Boot's generic 500.
+     */
+    @Test
+    void confirmingTwoConcurrentAttemptsOnTheSameSubscriptionLeavesExactlyOneWinner() throws Exception {
+        String token = registerCustomer();
+        UUID subscriptionId = purchaseSubscription(token);
+
+        UUID attemptA = confirmationReadyAttempt(token, subscriptionId);
+        UUID attemptB = confirmationReadyAttempt(token, subscriptionId);
+        CyclicBarrier bothReady = new CyclicBarrier(2);
+
+        Callable<Integer> confirmA = () -> confirmAndGetStatus(token, attemptA, bothReady);
+        Callable<Integer> confirmB = () -> confirmAndGetStatus(token, attemptB, bothReady);
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        List<Future<Integer>> results = pool.invokeAll(List.of(confirmA, confirmB));
+        pool.shutdown();
+
+        long succeeded = 0;
+        long conflicted = 0;
+        for (Future<Integer> result : results) {
+            int status = result.get();
+            if (status == 200) {
+                succeeded++;
+            } else if (status == 409) {
+                conflicted++;
+            }
+        }
+
+        assertThat(succeeded).as("exactly one confirm should win").isEqualTo(1);
+        assertThat(conflicted).as("the other should get a clean 409, not a raw 500").isEqualTo(1);
+    }
+
+    private int confirmAndGetStatus(String token, UUID attemptId, CyclicBarrier bothReady) throws Exception {
+        bothReady.await();
+        return mockMvc.perform(post("/cancellation/{id}/confirm", attemptId).header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getStatus();
+    }
+
+    private UUID confirmationReadyAttempt(String token, UUID subscriptionId) throws Exception {
+        UUID attemptId = startAttempt(token, subscriptionId);
+        mockMvc.perform(reasonRequest(token, attemptId, "too expensive")).andExpect(status().isOk());
+        mockMvc.perform(post("/cancellation/{id}/decline-offer", attemptId).header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.currentStep.type").value("CONFIRMATION"));
+        return attemptId;
     }
 
     @Test
