@@ -2,10 +2,15 @@ spring:
   application:
     name: sublite-core
 
+  # Host/port/credentials come from env vars (12-factor: where to connect
+  # is deployment config, not a profile) - defaults are for local dev
+  # against docker-compose.yml's plain postgres/redis services. The
+  # `docker` profile (application-docker.yml) is reserved for behavior
+  # toggles like log format, not connectivity.
   datasource:
-    url: jdbc:postgresql://localhost:5432/sublite
-    username: sublite
-    password: sublite
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:sublite}
+    username: ${DB_USER:sublite}
+    password: ${DB_PASSWORD:sublite}
 
   jpa:
     hibernate:
@@ -19,8 +24,36 @@ spring:
 
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Deliberately not "*": /actuator/env, /actuator/beans etc. can
+        # leak configuration (including secrets) and aren't needed for
+        # this project's observability story.
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      # Registers /actuator/health/liveness and /actuator/health/readiness
+      # groups - readiness includes the DB/Redis health indicators,
+      # liveness doesn't (matches what a k8s liveness vs readiness probe
+      # should each check). See HealthController for the older, simpler
+      # /health that predates this and still exists for compatibility.
+      probes:
+        enabled: true
+      # Anonymous callers (docker/k8s health checks) get UP/DOWN only;
+      # an ADMIN-authenticated caller sees the full breakdown (DB pool,
+      # disk space, Redis) - same reasoning as gating /admin/**, this is
+      # operational detail, not something to hand out for free.
+      show-details: when-authorized
+      roles: ADMIN
+
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%X{correlationId:-no-correlation-id}] %logger{36} - %msg%n"
 
 sublite:
   billing:

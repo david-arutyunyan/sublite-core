@@ -1,0 +1,12 @@
+# Activated via SPRING_PROFILES_ACTIVE=docker (set on the app service in
+# docker-compose.yml). Structured JSON logs are unreadable in a local
+# terminal during day-to-day dev, but exactly what a log aggregator
+# (ELK/Loki/CloudWatch) wants - ECS is Elastic's schema, picked since
+# it's the most widely recognized of Boot's three built-in formats
+# (ecs/logstash/gelf). MDC entries (correlationId - see
+# CorrelationIdFilter) are included in the structured output
+# automatically, no extra config needed.
+logging:
+  structured:
+    format:
+      console: ecs
