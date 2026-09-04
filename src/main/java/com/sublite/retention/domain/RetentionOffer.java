@@ -87,4 +87,8 @@ public class RetentionOffer {
     public Instant getCreatedAt() {
         return createdAt;
     }
+
+    public void setActive(boolean active) {
+        this.active = active;
+    }
 }

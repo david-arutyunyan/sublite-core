@@ -2,6 +2,8 @@ package com.sublite.retention.application;
 
 import com.sublite.retention.domain.RetentionOffer;
 import com.sublite.retention.domain.RetentionOfferCodeAlreadyExistsException;
+import com.sublite.retention.domain.RetentionOfferInUseException;
+import com.sublite.retention.domain.RetentionOfferNotActiveException;
 import com.sublite.retention.domain.RetentionOfferNotFoundException;
 import com.sublite.retention.domain.RetentionOfferType;
 import com.sublite.retention.domain.RetentionStep;
@@ -76,6 +78,9 @@ public class RetentionAdminService {
                 throw new RetentionStepRequiresOfferException();
             }
             offer = offers.findById(offerId).orElseThrow(() -> new RetentionOfferNotFoundException(offerId));
+            if (!offer.isActive()) {
+                throw new RetentionOfferNotActiveException(offerId);
+            }
         }
 
         RetentionStep step = steps.save(new RetentionStep(UUID.randomUUID(), stepOrder, type, offer, Instant.now(clock)));
@@ -91,6 +96,28 @@ public class RetentionAdminService {
         flowConfigService.evictCache();
         log.info("Retention step {}: stepId={}", active ? "activated" : "deactivated", stepId);
         return step;
+    }
+
+    /**
+     * Deactivating is blocked while an active step still points at this
+     * offer - RetentionFlowConfigService.loadAndCache() has no filter on
+     * offer.isActive(), so an inactive offer reachable through an active
+     * OFFER step would still be served to customers with no way to tell.
+     * Rather than teach the read side to filter mid-flow (which step would
+     * a customer already sitting on that step see instead?), the write
+     * side simply refuses to create the inconsistent state: deactivate or
+     * reassign the step first.
+     */
+    @Transactional
+    public RetentionOffer setOfferActive(UUID offerId, boolean active) {
+        RetentionOffer offer = offers.findById(offerId).orElseThrow(() -> new RetentionOfferNotFoundException(offerId));
+        if (!active && steps.existsByOfferIdAndActiveTrue(offerId)) {
+            throw new RetentionOfferInUseException(offerId);
+        }
+        offer.setActive(active);
+        flowConfigService.evictCache();
+        log.info("Retention offer {}: offerId={}", active ? "activated" : "deactivated", offerId);
+        return offer;
     }
 
     /**

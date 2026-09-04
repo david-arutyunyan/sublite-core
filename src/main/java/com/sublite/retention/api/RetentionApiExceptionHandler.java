@@ -3,6 +3,8 @@ package com.sublite.retention.api;
 import com.sublite.retention.domain.CancellationAttemptNotFoundException;
 import com.sublite.retention.domain.InvalidCancellationStepException;
 import com.sublite.retention.domain.RetentionOfferCodeAlreadyExistsException;
+import com.sublite.retention.domain.RetentionOfferInUseException;
+import com.sublite.retention.domain.RetentionOfferNotActiveException;
 import com.sublite.retention.domain.RetentionOfferNotFoundException;
 import com.sublite.retention.domain.RetentionStepNotFoundException;
 import com.sublite.retention.domain.RetentionStepOrderAlreadyExistsException;
@@ -20,12 +22,12 @@ public class RetentionApiExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 
-    @ExceptionHandler({RetentionOfferCodeAlreadyExistsException.class, RetentionStepOrderAlreadyExistsException.class})
+    @ExceptionHandler({RetentionOfferCodeAlreadyExistsException.class, RetentionStepOrderAlreadyExistsException.class, RetentionOfferInUseException.class})
     ProblemDetail handleConflict(RuntimeException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
 
-    @ExceptionHandler({RetentionStepRequiresOfferException.class, InvalidCancellationStepException.class})
+    @ExceptionHandler({RetentionStepRequiresOfferException.class, InvalidCancellationStepException.class, RetentionOfferNotActiveException.class})
     ProblemDetail handleBadRequest(RuntimeException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
     }

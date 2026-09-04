@@ -71,4 +71,11 @@ public class RetentionAdminController {
     public RetentionStepResponse setStepActive(@PathVariable UUID id, @Valid @RequestBody SetActiveRequest request) {
         return RetentionStepResponse.from(service.setStepActive(id, request.active()));
     }
+
+    @PatchMapping("/offers/{id}/active")
+    @Operation(summary = "Activate or deactivate an offer",
+            description = "Deactivating is rejected while an active step still references this offer.")
+    public RetentionOfferResponse setOfferActive(@PathVariable UUID id, @Valid @RequestBody SetActiveRequest request) {
+        return RetentionOfferResponse.from(service.setOfferActive(id, request.active()));
+    }
 }

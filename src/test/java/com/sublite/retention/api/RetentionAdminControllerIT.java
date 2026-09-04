@@ -110,6 +110,53 @@ class RetentionAdminControllerIT {
     }
 
     @Test
+    void deactivatingAndReactivatingAnUnusedOfferTogglesActive() throws Exception {
+        UUID offerId = createOffer();
+
+        mockMvc.perform(patch("/admin/retention/offers/{id}/active", offerId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new SetActiveRequest(false))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
+
+        mockMvc.perform(patch("/admin/retention/offers/{id}/active", offerId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new SetActiveRequest(true))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(true));
+    }
+
+    /**
+     * The gap this fixes: RetentionFlowConfigService.loadAndCache() never
+     * filtered on offer.isActive(), only step.isActive() - a deactivated
+     * offer still reachable through an active OFFER step would silently
+     * keep being served to customers. Rather than teach the read side to
+     * handle that, the write side now refuses to create it.
+     */
+    @Test
+    void deactivatingAnOfferStillReferencedByAnActiveStepIsRejected() throws Exception {
+        UUID offerId = createOffer();
+        createStep(RetentionStepType.OFFER, offerId);
+
+        mockMvc.perform(patch("/admin/retention/offers/{id}/active", offerId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new SetActiveRequest(false))))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void creatingAnOfferStepWithADeactivatedOfferIsRejected() throws Exception {
+        UUID offerId = createOffer();
+        mockMvc.perform(patch("/admin/retention/offers/{id}/active", offerId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new SetActiveRequest(false))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(createStepRequest(randomStepOrder(), RetentionStepType.OFFER, offerId))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void deactivatingAStepTogglesActive() throws Exception {
         UUID stepId = createStep(RetentionStepType.SURVEY, null);
 
@@ -136,6 +183,12 @@ class RetentionAdminControllerIT {
         RetentionFlowConfig after = flowConfigService.getActiveFlow();
         assertThat(after.steps()).hasSize(beforeCount + 1);
         assertThat(after.steps().stream().map(RetentionFlowConfig.StepView::stepId)).contains(stepId);
+    }
+
+    private UUID createOffer() throws Exception {
+        String body = mockMvc.perform(createOfferRequest("offer-" + UUID.randomUUID()))
+                .andReturn().getResponse().getContentAsString();
+        return UUID.fromString(objectMapper.readTree(body).get("id").asText());
     }
 
     private UUID createStep(RetentionStepType type, UUID offerId) throws Exception {
