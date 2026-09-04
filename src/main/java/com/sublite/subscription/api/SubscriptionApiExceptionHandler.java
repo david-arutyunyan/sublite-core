@@ -6,6 +6,7 @@ import com.sublite.subscription.domain.PlanCodeAlreadyExistsException;
 import com.sublite.subscription.domain.PlanNotFoundException;
 import com.sublite.subscription.domain.PlanPriceNotFoundException;
 import com.sublite.subscription.domain.SubscriptionNotFoundException;
+import com.sublite.subscription.domain.SubscriptionNotInGracePeriodException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -28,7 +29,7 @@ public class SubscriptionApiExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 
-    @ExceptionHandler({PlanCodeAlreadyExistsException.class, CustomerAlreadySubscribedException.class})
+    @ExceptionHandler({PlanCodeAlreadyExistsException.class, CustomerAlreadySubscribedException.class, SubscriptionNotInGracePeriodException.class})
     ProblemDetail handleConflict(RuntimeException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }

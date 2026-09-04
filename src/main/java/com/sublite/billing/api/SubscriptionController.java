@@ -56,4 +56,13 @@ public class SubscriptionController {
         UUID customerId = UUID.fromString(jwt.getSubject());
         return MySubscriptionResponse.from(service.getMySubscription(customerId));
     }
+
+    @PostMapping("/me/retry-payment")
+    @Operation(summary = "Retry a failed payment now",
+            description = "Only valid while the subscription is in GRACE_PERIOD - charges the same still-"
+                    + "pending invoice the scheduler would eventually retry on its own, just immediately.")
+    public MySubscriptionResponse retryPayment(@AuthenticationPrincipal Jwt jwt) {
+        UUID customerId = UUID.fromString(jwt.getSubject());
+        return MySubscriptionResponse.from(service.retryPayment(customerId));
+    }
 }

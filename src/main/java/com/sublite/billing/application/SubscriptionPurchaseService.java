@@ -5,6 +5,7 @@ import com.sublite.subscription.domain.NoActiveSubscriptionException;
 import com.sublite.subscription.domain.PlanPrice;
 import com.sublite.subscription.domain.PlanPriceNotFoundException;
 import com.sublite.subscription.domain.Subscription;
+import com.sublite.subscription.domain.SubscriptionNotInGracePeriodException;
 import com.sublite.subscription.domain.SubscriptionStatus;
 import com.sublite.subscription.infrastructure.PlanPriceRepository;
 import com.sublite.subscription.infrastructure.SubscriptionRepository;
@@ -111,5 +112,28 @@ public class SubscriptionPurchaseService {
     public Subscription getMySubscription(UUID customerId) {
         return subscriptions.findByCustomerIdAndStatusInWithPlan(customerId, LIVE_STATUSES)
                 .orElseThrow(() -> new NoActiveSubscriptionException(customerId));
+    }
+
+    /**
+     * A customer-triggered charge attempt for a subscription already
+     * sitting in GRACE_PERIOD - "I fixed my card, try again now" instead
+     * of waiting for the scheduler's own backoff (RetryPolicy). Reuses
+     * BillingOrchestrator.processOne() unchanged: it finds the SAME
+     * still-PENDING invoice for the current period (nothing marks an
+     * invoice PAID until a charge actually succeeds) and charges it -
+     * BillingService.chargeInvoice()'s guard only ever blocks re-charging
+     * an already-PAID invoice, never a PENDING one, so this is exactly as
+     * safe as letting the scheduler retry it, just not waiting for that.
+     */
+    public Subscription retryPayment(UUID customerId) {
+        Subscription subscription = getMySubscription(customerId);
+        if (subscription.getStatus() != SubscriptionStatus.GRACE_PERIOD) {
+            throw new SubscriptionNotInGracePeriodException(subscription.getId());
+        }
+
+        UUID subscriptionId = subscription.getId();
+        log.info("Payment retry requested: customerId={}, subscriptionId={}", customerId, subscriptionId);
+        billingOrchestrator.processOne(subscriptionId);
+        return subscriptions.findByIdWithPlanPrice(subscriptionId).orElseThrow();
     }
 }

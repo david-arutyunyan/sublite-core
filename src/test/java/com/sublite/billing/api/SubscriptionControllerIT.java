@@ -149,6 +149,58 @@ class SubscriptionControllerIT {
                 .andExpect(jsonPath("$.planCode").value(planCode));
     }
 
+    @Test
+    void retryPaymentAfterADeclineSucceedsWhenTheGatewayNowApproves() throws Exception {
+        when(paymentGateway.charge(any(), any()))
+                .thenReturn(new ChargeResult.Declined("INSUFFICIENT_FUNDS"))
+                .thenReturn(new ChargeResult.Success("ref-1"));
+        UUID planPriceId = createPlanAsAdmin();
+        String customerToken = registerCustomer();
+        mockMvc.perform(purchaseRequest(customerToken, planPriceId))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("GRACE_PERIOD"));
+
+        mockMvc.perform(post("/subscriptions/me/retry-payment").header("Authorization", "Bearer " + customerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACTIVE"));
+    }
+
+    @Test
+    void retryPaymentStillDeclinedStaysInGracePeriod() throws Exception {
+        when(paymentGateway.charge(any(), any())).thenReturn(new ChargeResult.Declined("INSUFFICIENT_FUNDS"));
+        UUID planPriceId = createPlanAsAdmin();
+        String customerToken = registerCustomer();
+        mockMvc.perform(purchaseRequest(customerToken, planPriceId)).andExpect(status().isCreated());
+
+        mockMvc.perform(post("/subscriptions/me/retry-payment").header("Authorization", "Bearer " + customerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("GRACE_PERIOD"));
+    }
+
+    @Test
+    void retryPaymentWhileActiveIsRejected() throws Exception {
+        when(paymentGateway.charge(any(), any())).thenReturn(new ChargeResult.Success("ref-1"));
+        UUID planPriceId = createPlanAsAdmin();
+        String customerToken = registerCustomer();
+        mockMvc.perform(purchaseRequest(customerToken, planPriceId)).andExpect(status().isCreated());
+
+        mockMvc.perform(post("/subscriptions/me/retry-payment").header("Authorization", "Bearer " + customerToken))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void retryPaymentWithNoSubscriptionReturns404() throws Exception {
+        String customerToken = registerCustomer();
+
+        mockMvc.perform(post("/subscriptions/me/retry-payment").header("Authorization", "Bearer " + customerToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void retryPaymentWithoutATokenIsRejected() throws Exception {
+        mockMvc.perform(post("/subscriptions/me/retry-payment")).andExpect(status().isUnauthorized());
+    }
+
     private MockHttpServletRequestBuilder purchaseRequest(String token, UUID planPriceId) throws Exception {
         return post("/subscriptions")
                 .header("Authorization", "Bearer " + token)
