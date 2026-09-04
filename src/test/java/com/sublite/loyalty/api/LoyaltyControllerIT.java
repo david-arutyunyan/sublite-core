@@ -97,6 +97,42 @@ class LoyaltyControllerIT {
                 .andExpect(jsonPath("$.balance").value(50));
     }
 
+    @Test
+    void historyIsEmptyForACustomerWhoHasNeverEarnedAnyPoints() throws Exception {
+        String token = registerCustomer();
+
+        mockMvc.perform(get("/loyalty/me/transactions").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    void historyRequiresAuthentication() throws Exception {
+        mockMvc.perform(get("/loyalty/me/transactions")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void aSuccessfulPurchaseShowsUpAsAnEarnTransactionInHistory() throws Exception {
+        when(paymentGateway.charge(any(), any())).thenReturn(new ChargeResult.Success("ref-1"));
+        String adminToken = adminToken();
+        mockMvc.perform(post("/admin/loyalty/rules")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new SetLoyaltyRuleRequest(LoyaltyEventType.PAYMENT_SUCCESS, 50))))
+                .andExpect(status().isCreated());
+
+        String customerToken = registerCustomer();
+        purchaseSubscription(customerToken, adminToken);
+
+        mockMvc.perform(get("/loyalty/me/transactions").header("Authorization", "Bearer " + customerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].type").value("EARN"))
+                .andExpect(jsonPath("$[0].points").value(50))
+                .andExpect(jsonPath("$[0].reason").value("PAYMENT_SUCCESS"));
+    }
+
     private String registerCustomer() throws Exception {
         String email = "customer-" + UUID.randomUUID() + "@example.com";
         String body = mockMvc.perform(post("/auth/register")

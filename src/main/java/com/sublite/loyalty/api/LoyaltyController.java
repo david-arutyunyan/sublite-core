@@ -1,6 +1,7 @@
 package com.sublite.loyalty.api;
 
 import com.sublite.loyalty.api.dto.LoyaltyBalanceResponse;
+import com.sublite.loyalty.api.dto.LoyaltyTransactionResponse;
 import com.sublite.loyalty.application.LoyaltyService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -36,5 +38,14 @@ public class LoyaltyController {
     public LoyaltyBalanceResponse getBalance(@AuthenticationPrincipal Jwt jwt) {
         UUID customerId = UUID.fromString(jwt.getSubject());
         return new LoyaltyBalanceResponse(loyaltyService.getBalance(customerId));
+    }
+
+    @GetMapping("/me/transactions")
+    @Operation(summary = "My loyalty point history, newest first")
+    public List<LoyaltyTransactionResponse> getHistory(@AuthenticationPrincipal Jwt jwt) {
+        UUID customerId = UUID.fromString(jwt.getSubject());
+        return loyaltyService.getHistory(customerId).stream()
+                .map(LoyaltyTransactionResponse::from)
+                .toList();
     }
 }

@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -83,6 +84,13 @@ public class LoyaltyService implements LoyaltyAwarder {
     @Transactional(readOnly = true)
     public int getBalance(UUID customerId) {
         return accounts.findByCustomerId(customerId).map(LoyaltyAccount::getBalance).orElse(0);
+    }
+
+    @Transactional(readOnly = true)
+    public List<LoyaltyTransaction> getHistory(UUID customerId) {
+        return accounts.findByCustomerId(customerId)
+                .map(account -> transactions.findByAccountIdOrderByOccurredAtDesc(account.getId()))
+                .orElseGet(List::of);
     }
 
     /**
