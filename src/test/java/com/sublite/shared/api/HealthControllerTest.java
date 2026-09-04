@@ -3,6 +3,7 @@ package com.sublite.shared.api;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -15,7 +16,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/**
+ * addFilters = false: a @WebMvcTest slice only loads HealthController, not
+ * SecurityConfig/JwtConfig (those are plain @Configuration beans elsewhere
+ * in the app, not part of this slice) - without this, Spring Boot's
+ * default "secure everything" auto-configuration would 401 this request.
+ * Security itself (permitAll on /health, JWT on everything else) is
+ * exercised for real in AuthControllerIT instead.
+ */
 @WebMvcTest(HealthController.class)
+@AutoConfigureMockMvc(addFilters = false)
 class HealthControllerTest {
 
     @Autowired

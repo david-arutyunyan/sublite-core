@@ -32,3 +32,11 @@ sublite:
   retention:
     flow-cache:
       ttl: PT5M
+  security:
+    jwt:
+      # Dev-only default (32 random bytes, base64). A real deployment
+      # overrides this via SUBLITE_JWT_SECRET - the signing key must never
+      # live in version control outside a throwaway dev value like this.
+      secret: ${SUBLITE_JWT_SECRET:fvlE+/417VRbYBny6GOmpe9X0QgMb++GOqHh6/xbE8I=}
+      issuer: sublite-core
+      access-token-ttl: PT1H
