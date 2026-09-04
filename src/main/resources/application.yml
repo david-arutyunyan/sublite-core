@@ -91,7 +91,13 @@ sublite:
     scheduler:
       interval: PT1M
     retry:
-      base-interval: P1D
+      # A real payment provider's own retry schedule is usually measured
+      # in days (customers need time to notice and fix a card), but this
+      # project's whole billing cycle is minutes-to-months depending on
+      # the demo, not the usual 30-day month - 10 minutes keeps a failed
+      # charge's automatic retries actually observable instead of a
+      # multi-day wait. See RetryPolicy.nextAttemptAt() for the doubling.
+      base-interval: PT10M
       max-attempts: 3
   retention:
     flow-cache:
