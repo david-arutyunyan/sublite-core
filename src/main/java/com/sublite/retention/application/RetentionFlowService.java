@@ -102,6 +102,17 @@ public class RetentionFlowService {
         return attempt;
     }
 
+    /**
+     * Public read helper for the customer-facing response (see
+     * retention.api.RetentionCustomerController) - not itself a flow
+     * transition, just "what step is this attempt sitting at right now",
+     * so a caller (the frontend) knows whether to render a survey, an
+     * offer, or a confirmation screen next.
+     */
+    public RetentionFlowConfig.StepView currentStep(CancellationAttempt attempt) {
+        return stepAt(attempt.getCurrentStepOrder());
+    }
+
     private void applyOfferEffect(UUID subscriptionId, RetentionFlowConfig.OfferView offer) {
         switch (offer.type()) {
             case PAUSE_SUBSCRIPTION ->

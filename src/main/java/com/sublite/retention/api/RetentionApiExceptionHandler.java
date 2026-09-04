@@ -1,5 +1,7 @@
 package com.sublite.retention.api;
 
+import com.sublite.retention.domain.CancellationAttemptNotFoundException;
+import com.sublite.retention.domain.InvalidCancellationStepException;
 import com.sublite.retention.domain.RetentionOfferCodeAlreadyExistsException;
 import com.sublite.retention.domain.RetentionOfferNotFoundException;
 import com.sublite.retention.domain.RetentionStepNotFoundException;
@@ -13,7 +15,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class RetentionApiExceptionHandler {
 
-    @ExceptionHandler({RetentionOfferNotFoundException.class, RetentionStepNotFoundException.class})
+    @ExceptionHandler({RetentionOfferNotFoundException.class, RetentionStepNotFoundException.class, CancellationAttemptNotFoundException.class})
     ProblemDetail handleNotFound(RuntimeException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
     }
@@ -23,8 +25,8 @@ public class RetentionApiExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
 
-    @ExceptionHandler(RetentionStepRequiresOfferException.class)
-    ProblemDetail handleBadRequest(RetentionStepRequiresOfferException ex) {
+    @ExceptionHandler({RetentionStepRequiresOfferException.class, InvalidCancellationStepException.class})
+    ProblemDetail handleBadRequest(RuntimeException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 }
