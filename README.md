@@ -197,6 +197,7 @@ erDiagram
 - `GET /actuator/health/liveness` / `.../readiness` — второй проверяет реальную связность с Postgres/Redis, первый — нет; ровно так, как и должны разделяться liveness/readiness для оркестратора.
 - `GET /actuator/metrics`, `GET /actuator/prometheus` — только с ролью `ADMIN`.
 - Структурированные JSON-логи (ECS-формат) включаются профилем `docker` (см. `SPRING_PROFILES_ACTIVE` в `docker-compose.yml`); при локальной разработке — обычный читаемый вывод в консоль. Каждая строка лога несёт `correlationId` (генерируется на входе в `CorrelationIdFilter`, эхом уходит в заголовке `X-Correlation-Id`).
+- При запуске без Docker (`./mvnw spring-boot:run`) логи дополнительно пишутся в файл `logs/app.log` (с ротацией: до 10 МБ на файл, 7 файлов истории, 100 МБ суммарно) — внутри контейнера файла нет намеренно, там только stdout (`application-docker.yml` явно отключает файловый вывод).
 
 ## CI/CD
 

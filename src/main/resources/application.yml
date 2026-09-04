@@ -66,7 +66,25 @@ management:
 
 logging:
   pattern:
+    # console and file are separate properties in Boot - setting only
+    # the former leaves the file appender on Boot's own default pattern,
+    # without correlationId. Same pattern for both here on purpose.
     console: "%d{HH:mm:ss.SSS} %-5level [%X{correlationId:-no-correlation-id}] %logger{36} - %msg%n"
+    file: "%d{HH:mm:ss.SSS} %-5level [%X{correlationId:-no-correlation-id}] %logger{36} - %msg%n"
+  # File output for local runs without Docker (`./mvnw spring-boot:run`) -
+  # something to grep/tail after the fact instead of only having whatever
+  # is still in the terminal's scrollback. Turned back off in the
+  # `docker` profile (application-docker.yml): a container's filesystem
+  # is disposable, and writing a log file nobody reads inside it would
+  # contradict the stdout-only, 12-factor logging this project already
+  # commits to for `docker compose` (see README).
+  file:
+    name: logs/app.log
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB
+      max-history: 7
+      total-size-cap: 100MB
 
 sublite:
   billing:

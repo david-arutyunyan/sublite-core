@@ -10,3 +10,10 @@ logging:
   structured:
     format:
       console: ecs
+  # Empty overrides application.yml's logging.file.name and disables file
+  # output - a container's filesystem is disposable, so a log file
+  # written inside it and never read (docker compose down wipes it) is
+  # pure waste. Structured stdout above is what an aggregator should
+  # actually be reading from in this profile.
+  file:
+    name:
