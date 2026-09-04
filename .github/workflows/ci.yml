@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+# A new push to the same branch/PR cancels whatever CI run was already
+# in flight for it - no point finishing a build for a commit that's
+# already been superseded.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          # Caches ~/.m2/repository keyed on pom.xml - a dependency-only
+          # change invalidates it, a source-only change doesn't, so most
+          # runs skip re-downloading the whole dependency tree.
+          cache: maven
+
+      # `verify`, not `test`: Surefire's *Test unit tests AND Failsafe's
+      # *IT integration tests both run, including the Testcontainers-backed
+      # ones (real Postgres/Redis, not H2/mocks) and the ArchUnit module-
+      # boundary check. ubuntu-latest ships Docker preinstalled, so
+      # Testcontainers works here with no extra setup - same tests,
+      # same guarantees, as running `mvn verify` locally.
+      - name: Build and test
+        run: ./mvnw -B verify
+
+      # Confirms the image actually builds (Dockerfile syntax, multi-stage
+      # COPY paths, etc. all still work) on every push - not pushed
+      # anywhere, there's no registry wired up for this project and
+      # nothing pulls it from one.
+      - name: Build Docker image
+        run: docker build -t sublite-core:ci .
