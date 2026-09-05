@@ -32,7 +32,9 @@ services:
   grafana:
     image: grafana/grafana:11.2.0
     ports:
-      - "3000:3000"
+      # 3001, not 3000 - sublite-distributed runs its own Grafana on 3000,
+      # and the two projects are meant to be runnable side by side.
+      - "3001:3000"
     environment:
       # Local-only observability tooling, never exposed beyond
       # localhost - anonymous admin access trades the login screen for
